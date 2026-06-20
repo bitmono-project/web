@@ -14,6 +14,16 @@ public sealed class BitMonoObfuscationService : IObfuscationService
 {
     private static readonly string ConfigDir = Path.Combine(AppContext.BaseDirectory, "BitMonoConfig");
 
+    // Rename pool (the Renamer needs a non-empty set). Placeholder — tune/replace with presets later.
+    private static readonly string[] RenamerStrings =
+    [
+        "Initialize", "Awake", "Start", "FixedUpdate", "Reload", "Execute", "Load", "Save",
+        "GetPermissions", "HasPermission", "Register", "Invoke", "TryInvoke", "Send", "Read",
+        "Close", "Broadcast", "OnEnable", "OnDisable", "GetName", "SetName", "ParseString",
+        "ParseBool", "LoadPlugin", "UnloadPlugin", "Translate", "Enqueue", "RunAsync", "Log",
+        "LogError", "LogWarning", "GetGroups", "AddGroup", "DeleteGroup", "GetState"
+    ];
+
     public async Task<byte[]> ObfuscateAsync(string fileName, byte[] input, CancellationToken ct)
     {
         var outputDir = Path.Combine(Path.GetTempPath(), "bitmono-obf", Guid.NewGuid().ToString("N"));
@@ -28,6 +38,7 @@ public sealed class BitMonoObfuscationService : IObfuscationService
                     Tips = false,
                     OutputDirectoryName = outputDir,
                     ReferencesDirectoryName = string.Empty,
+                    RandomStrings = RenamerStrings,
                 },
                 criticalsFile: Path.Combine(ConfigDir, "criticals.json"),
                 protectionsFile: Path.Combine(ConfigDir, "protections.json"));

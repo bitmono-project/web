@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/test/">
+    <Project Path="test/BitMono.Web.Tests/BitMono.Web.Tests.csproj" />
+  </Folder>
   <Project Path="BitMono.Web.Api/BitMono.Web.Api.csproj" />
   <Project Path="BitMono.Web.AppHost/BitMono.Web.AppHost.csproj" />
   <Project Path="BitMono.Web.ServiceDefaults/BitMono.Web.ServiceDefaults.csproj" />

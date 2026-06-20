@@ -5,13 +5,17 @@ using BitMono.Web.Api.Storage;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Npgsql;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.AddSentry();
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -47,7 +51,6 @@ app.MapDefaultEndpoints();
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
-app.UseHttpsRedirection();
 app.UseRateLimiter();
 
 // Lock /hangfire behind Cloudflare Access before exposing publicly.
@@ -55,6 +58,8 @@ app.UseHangfireDashboard("/hangfire");
 
 app.MapControllers();
 
-RecurringJob.AddOrUpdate<CleanupJob>("cleanup", j => j.RunAsync(CancellationToken.None), Cron.Hourly);
+// Register after the app is serving — AddOrUpdate hits Postgres and must not block startup.
+app.Lifetime.ApplicationStarted.Register(() =>
+    RecurringJob.AddOrUpdate<CleanupJob>("cleanup", j => j.RunAsync(CancellationToken.None), Cron.Hourly));
 
 app.Run();

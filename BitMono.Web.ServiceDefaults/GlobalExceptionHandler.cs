@@ -21,7 +21,9 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         });
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
-        await httpContext.Response.WriteAsJsonAsync(new { error = "An unexpected error occurred" }, ct);
+        await httpContext.Response.WriteAsJsonAsync(new ErrorResponse("An unexpected error occurred"), ct);
         return true;
     }
 }
+
+public sealed record ErrorResponse(string Error);

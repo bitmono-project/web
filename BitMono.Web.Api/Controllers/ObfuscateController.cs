@@ -1,4 +1,5 @@
 using BitMono.Web.Api.Jobs;
+using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Storage;
 using Hangfire;
 using Microsoft.AspNetCore.Mvc;
@@ -27,12 +28,12 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
             await store.SaveInputAsync(id, stream, ct);
 
         jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, file.FileName, CancellationToken.None));
-        return Accepted($"/obfuscate/{id}", new { id });
+        return Accepted($"/obfuscate/{id}", new ObfuscateAcceptedResponse(id));
     }
 
     [HttpGet("{id:guid}")]
     public IActionResult Status(Guid id) =>
-        Ok(new { id, status = store.Status(id).ToString().ToLowerInvariant() });
+        Ok(new ObfuscateStatusResponse(id, store.Status(id)));
 
     [HttpGet("{id:guid}/download")]
     public async Task<IActionResult> Download(Guid id, string? name, CancellationToken ct)

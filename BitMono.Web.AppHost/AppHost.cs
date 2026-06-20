@@ -24,7 +24,7 @@ if (!runMode)
     redis.WithPassword(builder.AddParameter("RedisPassword", secret: true));
 }
 
-builder.AddProject<Projects.BitMono_Web_Api>("api")
+builder.AddProject<Projects.BitMono_Web_Api>("api", launchProfileName: "http")
     .WithReference(db)
     .WithReference(redis)
     .WaitFor(db)
