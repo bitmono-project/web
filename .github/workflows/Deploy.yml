@@ -45,7 +45,7 @@ jobs:
           DockerRegistry__RegistryUsername: ${{ github.actor }}
           DockerRegistry__RegistryPassword: ${{ secrets.GITHUB_TOKEN }}
           # Remote deploy path
-          Deployment__RemoteDeployPath: /opt/bitmono-web
+          Deployment__RemoteDeployPath: /opt/bitmono/web
           # Secret parameters (AppHost AddParameter)
           Parameters__DatabasePassword: ${{ secrets.DATABASE_PASSWORD }}
           Parameters__RedisPassword: ${{ secrets.REDIS_PASSWORD }}
