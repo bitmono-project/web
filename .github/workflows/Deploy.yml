@@ -41,7 +41,7 @@ jobs:
           DockerSSH__SshPort: ${{ secrets.SSH_PORT }}
           # Container registry (GitHub Container Registry under the org)
           DockerRegistry__RegistryUrl: ghcr.io
-          DockerRegistry__RepositoryPrefix: bitmono-project/bitmono-web
+          DockerRegistry__RepositoryPrefix: bitmono-project/web
           DockerRegistry__RegistryUsername: ${{ github.actor }}
           DockerRegistry__RegistryPassword: ${{ secrets.GITHUB_TOKEN }}
           # Remote deploy path
