@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BitMono.Web.Api\BitMono.Web.Api.csproj" />
+    <ProjectReference Include="..\BitMono.Web.MigrationService\BitMono.Web.MigrationService.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

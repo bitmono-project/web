@@ -15,6 +15,7 @@ if (!runMode)
     postgres.WithPassword(builder.AddParameter("DatabasePassword", secret: true));
 }
 var db = postgres.AddDatabase("db");
+var appdb = postgres.AddDatabase("appdb"); // EF Core schema (crackmes); Hangfire keeps `db`
 
 var redis = builder.AddRedis("redis")
     .WithDataVolume()
@@ -32,13 +33,20 @@ var obfuscation = runMode && Directory.Exists(obfuscationPath)
     ? builder.AddDockerfile("obfuscation", obfuscationPath, "Dockerfile").WithHttpEndpoint(targetPort: 8080, name: "http")
     : builder.AddContainer("obfuscation", "ghcr.io/bitmono-project/obfuscation-service:latest").WithHttpEndpoint(targetPort: 8080, name: "http");
 
+// Runs EF migrations (prod) / recreates the dev schema on `appdb`, then exits; the API waits for it.
+var migrations = builder.AddProject<Projects.BitMono_Web_MigrationService>("migrations")
+    .WithReference(appdb)
+    .WaitFor(appdb);
+
 var api = builder.AddProject<Projects.BitMono_Web_Api>("api", launchProfileName: "http")
     .WithReference(db)
     .WithReference(redis)
+    .WithReference(appdb)
     .WithEnvironment("Obfuscation__Url", obfuscation.GetEndpoint("http"))
     .WaitFor(db)
     .WaitFor(redis)
-    .WaitFor(obfuscation);
+    .WaitFor(obfuscation)
+    .WaitForCompletion(migrations);
 
 // The Vite frontend, orchestrated by Aspire (npm install + `npm run dev`). AddViteApp already
 // registers the http endpoint + PORT, so don't add WithHttpEndpoint. Run-mode only — production
