@@ -53,16 +53,28 @@ var api = builder.AddProject<Projects.BitMono_Web_Api>("api", launchProfileName:
     .WaitFor(obfuscation)
     .WaitForCompletion(migrations);
 
-// The Vite frontend, orchestrated by Aspire (npm install + `npm run dev`). AddViteApp already
-// registers the http endpoint + PORT, so don't add WithHttpEndpoint. Run-mode only — production
-// serving (static/CDN) is a separate deploy concern. See aspire.dev "Deploy JavaScript apps".
+// The frontend. Dev: the Vite dev server (its own resource in the dashboard). Deploy: Aspire builds
+// it and PublishWithContainerFiles copies the output into the api's wwwroot, so the api serves the
+// site from one origin — no separate container, no proxy, no CORS.
+var frontend = builder.AddViteApp("frontend", "../frontend")
+    .WithReference(api)
+    .WithEnvironment("VITE_API_URL", api.GetEndpoint("http"))
+    .WaitFor(api);
+
 if (runMode)
 {
-    builder.AddViteApp("frontend", "../frontend")
-        .WithReference(api)
-        .WithEnvironment("VITE_API_URL", api.GetEndpoint("http"))
-        .WaitFor(api)
-        .WithExternalHttpEndpoints();
+    frontend.WithExternalHttpEndpoints();
 }
+else
+{
+    // bitmono.dev — the api serves the site. Publish it on host port 9642 for the cloudflared
+    // already running on the server to point at (localhost:9642). Keep 9642 firewalled to localhost.
+    api.WithEndpoint("http", endpoint => endpoint.Port = 9642)
+       .WithExternalHttpEndpoints();
+}
+
+#pragma warning disable ASPIREJAVASCRIPT001 // PublishWithContainerFiles is experimental
+api.PublishWithContainerFiles(frontend, "wwwroot");
+#pragma warning restore ASPIREJAVASCRIPT001
 
 builder.Build().Run();
