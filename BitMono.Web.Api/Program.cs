@@ -21,18 +21,33 @@ builder.Services.AddOpenApi();
 
 builder.AddNpgsqlDataSource(connectionName: "db");
 
-builder.Services.AddHangfire((sp, config) => config
+// Hangfire has no Aspire client integration, so it needs the raw connection string.
+// NpgsqlDataSource redacts the password from its ConnectionString, which left Hangfire
+// connecting password-less (SASL/SCRAM failure) — so read the string Aspire injects.
+var dbConnectionString = builder.Configuration.GetConnectionString("db");
+builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UsePostgreSqlStorage(o => o.UseNpgsqlConnection(
-        sp.GetRequiredService<NpgsqlDataSource>().ConnectionString)));
+    .UsePostgreSqlStorage(o => o.UseNpgsqlConnection(dbConnectionString)));
 builder.Services.AddHangfireServer();
 
 builder.Services.AddSingleton<FileStore>();
-builder.Services.AddScoped<IObfuscationService, BitMonoObfuscationService>();
 builder.Services.AddScoped<ObfuscateJob>();
 builder.Services.AddScoped<CleanupJob>();
+
+// Obfuscation runs in the separate obfuscation-service; the API reaches it over HTTP (URL injected
+// by Aspire as Obfuscation:Url). RemoveAllResilienceHandlers opts this client out of the 30s
+// standard-resilience cap — obfuscation can take minutes.
+var obfuscationUrl = builder.Configuration["Obfuscation:Url"] ?? "http://localhost:8080";
+#pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is the supported way to opt out of the 30s default cap
+builder.Services.AddHttpClient("obfuscation", client =>
+{
+    client.BaseAddress = new Uri(obfuscationUrl);
+    client.Timeout = TimeSpan.FromMinutes(5);
+}).RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
+builder.Services.AddScoped<IObfuscationService, RemoteObfuscationService>();
 
 builder.Services.AddRateLimiter(options =>
 {

@@ -8,12 +8,12 @@ public sealed class ObfuscateJob(IObfuscationService obfuscator, FileStore store
 {
     // Obfuscation failures are deterministic, so don't retry.
     [AutomaticRetry(Attempts = 0)]
-    public async Task RunAsync(Guid id, string fileName, CancellationToken ct)
+    public async Task RunAsync(Guid id, string fileName, string[] protections, CancellationToken ct)
     {
         try
         {
             var input = await store.ReadInputAsync(id, ct);
-            var output = await obfuscator.ObfuscateAsync(fileName, input, ct);
+            var output = await obfuscator.ObfuscateAsync(fileName, input, protections, ct);
             await store.SaveOutputAsync(id, output, ct);
         }
         catch (Exception ex)

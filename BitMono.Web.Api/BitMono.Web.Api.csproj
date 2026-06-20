@@ -7,9 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BitMono.Host" Version="0.42.1" />
-    <PackageReference Include="BitMono.Obfuscation" Version="0.42.1" />
-    <PackageReference Include="BitMono.Protections" Version="0.42.1" />
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
     <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.6" />
@@ -20,10 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BitMono.Web.ServiceDefaults\BitMono.Web.ServiceDefaults.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Update="BitMonoConfig\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

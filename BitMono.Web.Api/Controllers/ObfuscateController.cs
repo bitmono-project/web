@@ -15,7 +15,7 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
 
     [HttpPost]
     [EnableRateLimiting("obfuscate")]
-    public async Task<IActionResult> Upload(IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> Upload(IFormFile file, [FromForm] string[] protections, CancellationToken ct)
     {
         if (file.Length is 0 or > MaxUploadBytes)
             return BadRequest("File must be between 1 byte and 30 MB.");
@@ -23,11 +23,14 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
             !file.FileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             return BadRequest("Only .dll/.exe assemblies are accepted.");
 
+        var selected = protections ?? [];
+
         var id = Guid.NewGuid();
         await using (var stream = file.OpenReadStream())
             await store.SaveInputAsync(id, stream, ct);
 
-        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, file.FileName, CancellationToken.None));
+        // Protections are validated/defaulted by the obfuscation-service (single source of truth).
+        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, file.FileName, selected, CancellationToken.None));
         return Accepted($"/obfuscate/{id}", new ObfuscateAcceptedResponse(id));
     }
 
