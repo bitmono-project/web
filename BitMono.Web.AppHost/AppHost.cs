@@ -32,10 +32,14 @@ var obfuscationPath = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, ".
 var obfuscation = runMode && Directory.Exists(obfuscationPath)
     ? builder.AddDockerfile("obfuscation", obfuscationPath, "Dockerfile").WithHttpEndpoint(targetPort: 8080, name: "http")
     : builder.AddContainer("obfuscation", "ghcr.io/bitmono-project/obfuscation-service:latest").WithHttpEndpoint(targetPort: 8080, name: "http");
+// Containers don't reload config at runtime; disabling the file watcher avoids the host's inotify
+// instance limit (the deploy server hit fs.inotify.max_user_instances=128 → startup IOException).
+obfuscation.WithEnvironment("DOTNET_hostBuilder__reloadConfigOnChange", "false");
 
 // Runs EF migrations (prod) / recreates the dev schema on `appdb`, then exits; the API waits for it.
 var migrations = builder.AddProject<Projects.BitMono_Web_MigrationService>("migrations")
     .WithReference(appdb)
+    .WithEnvironment("DOTNET_hostBuilder__reloadConfigOnChange", "false")
     .WaitFor(appdb);
 
 var api = builder.AddProject<Projects.BitMono_Web_Api>("api", launchProfileName: "http")
@@ -43,6 +47,7 @@ var api = builder.AddProject<Projects.BitMono_Web_Api>("api", launchProfileName:
     .WithReference(redis)
     .WithReference(appdb)
     .WithEnvironment("Obfuscation__Url", obfuscation.GetEndpoint("http"))
+    .WithEnvironment("DOTNET_hostBuilder__reloadConfigOnChange", "false")
     .WaitFor(db)
     .WaitFor(redis)
     .WaitFor(obfuscation)
