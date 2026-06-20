@@ -1,0 +1,53 @@
+name: Deploy
+
+# Manual for now. Uncomment the release trigger once the server + secrets are set up.
+on:
+  workflow_dispatch:
+  # release:
+  #   types: [published]
+
+permissions:
+  contents: read
+  packages: write # push images to ghcr.io/bitmono-project
+
+# Required repo/org secrets:
+#   SSH_PRIVATE_KEY, SERVER_HOST, SERVER_USER, SSH_PORT, DATABASE_PASSWORD, REDIS_PASSWORD, SENTRY_DSN
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install Aspire CLI
+        run: curl -sSL https://aspire.dev/install.sh | bash
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: aspire deploy
+        working-directory: BitMono.Web.AppHost
+        run: aspire deploy -e Production
+        env:
+          # SSH target
+          DockerSSH__TargetHost: ${{ secrets.SERVER_HOST }}
+          DockerSSH__SshUsername: ${{ secrets.SERVER_USER }}
+          DockerSSH__SshPort: ${{ secrets.SSH_PORT }}
+          # Container registry (GitHub Container Registry under the org)
+          DockerRegistry__RegistryUrl: ghcr.io
+          DockerRegistry__RepositoryPrefix: bitmono-project/bitmono-web
+          DockerRegistry__RegistryUsername: ${{ github.actor }}
+          DockerRegistry__RegistryPassword: ${{ secrets.GITHUB_TOKEN }}
+          # Remote deploy path
+          Deployment__RemoteDeployPath: /opt/bitmono-web
+          # Secret parameters (AppHost AddParameter)
+          Parameters__DatabasePassword: ${{ secrets.DATABASE_PASSWORD }}
+          Parameters__RedisPassword: ${{ secrets.REDIS_PASSWORD }}
+          # Sentry/Bugsink DSN
+          Sentry__Dsn: ${{ secrets.SENTRY_DSN }}

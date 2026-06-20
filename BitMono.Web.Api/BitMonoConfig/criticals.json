@@ -1,0 +1,101 @@
+{
+  // Members matching these rules are kept un-obfuscated. Copied from BitMono defaults; tune as needed.
+  "UseCriticalAttributes": true,
+  "CriticalAttributes": [
+    {
+      "Namespace": "UnityEngine",
+      "Name": "SerializeField"
+    },
+    {
+      "Namespace": "System.Runtime.CompilerServices",
+      "Name": "ModuleInitializerAttribute"
+    }
+  ],
+
+  "UseCriticalModelAttributes": true,
+  "CriticalModelAttributes": [
+    {
+      "Namespace": "System",
+      "Name": "SerializableAttribute"
+    },
+    {
+      "Namespace": "System.Xml.Serialization",
+      "Name": "XmlAttributeAttribute"
+    },
+    {
+      "Namespace": "System.Xml.Serialization",
+      "Name": "XmlArrayItemAttribute"
+    },
+    {
+      "Namespace": "Newtonsoft.Json",
+      "Name": "JsonPropertyAttribute"
+    }
+  ],
+
+  "UseCriticalInterfaces": true,
+  "CriticalInterfaces": [
+    "IRocketPlugin",
+    "IRocketCommand",
+    "IRocketPluginConfiguration",
+    "IDefaultable",
+    "IOpenModPlugin"
+  ],
+
+  "UseCriticalBaseTypes": true,
+  "CriticalBaseTypes": [
+    "RocketPlugin*",
+    "OpenModUnturnedPlugin*",
+    "OpenModUniversalPlugin*",
+    "Command*",
+    "RustPlugin*"
+  ],
+
+  "UseCriticalMethodsStartsWith": true,
+  "CriticalMethodsStartsWith": [
+    "OV_"
+  ],
+
+  "UseCriticalMethods": true,
+  "CriticalMethods": [
+    "Awake",
+    "OnEnable",
+    "Reset",
+    "Start",
+    "FixedUpdate",
+    "OnMouseUp",
+    "OnMouseEnter",
+    "OnMouseExit",
+    "OnMouseOver",
+    "OnMouseUpAsButton",
+    "OnMouseDown",
+    "OnMouseDrag",
+    "Update",
+    "LateUpdate",
+    "OnAnimatorIK",
+    "OnPreCull",
+    "OnWillRenderObject",
+    "OnBecameVisible",
+    "OnBecameInvisible",
+    "OnPreRender",
+    "OnRenderObject",
+    "OnDrawGizmos",
+    "OnGUI",
+    "OnTriggerEnter",
+    "OnTriggerStay",
+    "OnTriggerExit",
+    "OnTriggerEnter2D",
+    "OnTriggerStay2D",
+    "OnTriggerExit2D",
+    "OnCollisionEnter",
+    "OnCollisionStay",
+    "OnCollisionExit",
+    "OnCollisionEnter2D",
+    "OnCollisionStay2D",
+    "OnCollisionExit2D",
+    "WaitForEndOfFrame",
+    "OnApplicationPause",
+    "OnApplicationQuit",
+    "OnDisable",
+    "OnDestroy"
+  ]
+}

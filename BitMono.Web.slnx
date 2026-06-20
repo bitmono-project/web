@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="BitMono.Web.Api/BitMono.Web.Api.csproj" />
+  <Project Path="BitMono.Web.AppHost/BitMono.Web.AppHost.csproj" />
+  <Project Path="BitMono.Web.ServiceDefaults/BitMono.Web.ServiceDefaults.csproj" />
+</Solution>
