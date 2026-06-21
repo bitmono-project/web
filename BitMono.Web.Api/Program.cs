@@ -1,3 +1,4 @@
+using BitMono.Web.Api.Hangfire;
 using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Jobs;
 using BitMono.Web.Api.Obfuscation;
@@ -21,13 +22,12 @@ builder.Services.AddOpenApi();
 
 builder.AddNpgsqlDataSource(connectionName: "db");
 
-// Hangfire has no Aspire integration — NpgsqlDataSource.ConnectionString drops the password.
-var dbConnectionString = builder.Configuration.GetConnectionString("db");
-builder.Services.AddHangfire(config => config
+builder.Services.AddHangfire((sp, config) => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UsePostgreSqlStorage(o => o.UseNpgsqlConnection(dbConnectionString)));
+    .UsePostgreSqlStorage(o => o.UseConnectionFactory(
+        new NpgsqlDataSourceConnectionFactory(sp.GetRequiredService<NpgsqlDataSource>()))));
 builder.Services.AddHangfireServer();
 
 builder.Services.AddSingleton<FileStore>();
