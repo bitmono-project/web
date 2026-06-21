@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { ObfuscatePanel } from './components/ObfuscatePanel'
 import { TextScramble } from './components/TextScramble'
 import { getEngineVersion } from './lib/api'
+import { getAppVersion } from './lib/version'
 
 const d = (ms: number): CSSProperties => ({ ['--d' as string]: `${ms}ms` } as CSSProperties)
 
@@ -87,7 +88,7 @@ export default function App() {
 
       <footer className="mx-auto max-w-6xl border-t border-line px-6 py-8 font-mono text-xs text-faint">
         <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
-          <span>© bitmono — free &amp; open-source obfuscator for .NET &amp; Mono</span>
+          <span>© bitmono — free &amp; open-source obfuscator for .NET &amp; Mono · web {getAppVersion()}</span>
           <div className="flex gap-5">
             <a href="https://docs.bitmono.dev" className="transition-colors hover:text-ink">docs</a>
             <a href="https://github.com/sunnamed434/BitMono" className="transition-colors hover:text-ink">github</a>

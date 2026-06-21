@@ -56,7 +56,6 @@ builder.Services.AddRateLimiter(options =>
 var app = builder.Build();
 
 app.UseExceptionHandler();
-app.UseStaticFiles();
 
 app.MapDefaultEndpoints();
 if (app.Environment.IsDevelopment())
@@ -66,7 +65,6 @@ app.UseRateLimiter();
 app.UseHangfireDashboard("/hangfire");
 
 app.MapControllers();
-app.MapFallbackToFile("index.html");
 
 app.Lifetime.ApplicationStarted.Register(() =>
     RecurringJob.AddOrUpdate<CleanupJob>("cleanup", j => j.RunAsync(CancellationToken.None), Cron.Hourly));

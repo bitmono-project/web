@@ -31,6 +31,12 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
+      - name: Set environment variables
+        run: |
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+          echo "APP_VERSION=build.${{ github.run_number }}.${GITHUB_SHA::7}" >> $GITHUB_ENV
+
       - name: aspire deploy
         working-directory: BitMono.Web.AppHost
         run: aspire deploy -e Production
@@ -46,6 +52,8 @@ jobs:
           DockerRegistry__RegistryPassword: ${{ secrets.GITHUB_TOKEN }}
           # Remote deploy path
           Deployment__RemoteDeployPath: /opt/bitmono/web
+          IMAGE_TAG_SUFFIX: ${{ env.APP_VERSION }}
+          OWNER_LC: ${{ env.OWNER_LC }}
           # Secret parameters (AppHost AddParameter)
           Parameters__DatabasePassword: ${{ secrets.DATABASE_PASSWORD }}
           Parameters__RedisPassword: ${{ secrets.REDIS_PASSWORD }}
