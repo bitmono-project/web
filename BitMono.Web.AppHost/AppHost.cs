@@ -8,8 +8,6 @@ var config = builder.Configuration;
 var runMode = builder.ExecutionContext.IsRunMode;
 var imageOwner = config["OWNER_LC"] ?? "bitmono-project";
 
-// Docker Compose generation + SSH-deploy pipeline.
-// Aspire.Hosting.Docker.SshDeploy is our own package (see Safeturned/aspire-ssh-deploy, feedz.io feed).
 builder.AddDockerComposeEnvironment("bitmono")
     .WithSshDeploySupport();
 
@@ -21,7 +19,7 @@ if (!runMode)
     postgres.WithPassword(builder.AddParameter("DatabasePassword", secret: true));
 }
 var db = postgres.AddDatabase("db");
-var appdb = postgres.AddDatabase("appdb"); // EF Core schema (crackmes); Hangfire keeps `db`
+var appdb = postgres.AddDatabase("appdb");
 
 var redis = builder.AddRedis("redis")
     .WithDataVolume()
@@ -31,9 +29,6 @@ if (!runMode)
     redis.WithPassword(builder.AddParameter("RedisPassword", secret: true));
 }
 
-// Obfuscation engine — its own repo/image (bitmono-project/obfuscation-service), built + rolled
-// independently. Run-mode: build from the local sibling source if present (like Safeturned's
-// FileChecker); otherwise pull the published image. Internal-only — the API reaches it over HTTP.
 var obfuscationPath = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", "obfuscation-service"));
 var obfuscation = (runMode && Directory.Exists(obfuscationPath)
         ? builder.AddDockerfile("obfuscation", obfuscationPath, "Dockerfile")
@@ -74,7 +69,6 @@ var api = builder.AddProject<Projects.BitMono_Web_Api>("api", launchProfileName:
     .WaitFor(obfuscation)
     .WaitForCompletion(migrations);
 
-// Dev: Vite dev server. Deploy: Aspire builds the SPA and copies it into the api wwwroot.
 var frontend = builder.AddViteApp("web", "../frontend")
     .WithReference(api)
     .WithEnvironment("VITE_API_URL", api.GetEndpoint("http"))
@@ -86,13 +80,12 @@ if (runMode)
 }
 else
 {
-    // One origin — api serves the built SPA + JSON routes. Point Cloudflare tunnel at localhost:ApiDeployPort.
     api.WithHttpEndpoint(port: ApiDeployPort, targetPort: ApiDeployPort, name: "http", env: "HTTP_PORTS")
         .WithEnvironment("DOTNET_USE_POLLING_FILE_WATCHER", "1")
         .WithExternalHttpEndpoints();
 }
 
-#pragma warning disable ASPIREJAVASCRIPT001 // PublishWithContainerFiles is experimental
+#pragma warning disable ASPIREJAVASCRIPT001
 api.PublishWithContainerFiles(frontend, "wwwroot");
 #pragma warning restore ASPIREJAVASCRIPT001
 

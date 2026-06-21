@@ -21,9 +21,7 @@ builder.Services.AddOpenApi();
 
 builder.AddNpgsqlDataSource(connectionName: "db");
 
-// Hangfire has no Aspire client integration, so it needs the raw connection string.
-// NpgsqlDataSource redacts the password from its ConnectionString, which left Hangfire
-// connecting password-less (SASL/SCRAM failure) — so read the string Aspire injects.
+// Hangfire has no Aspire integration — NpgsqlDataSource.ConnectionString drops the password.
 var dbConnectionString = builder.Configuration.GetConnectionString("db");
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -36,11 +34,8 @@ builder.Services.AddSingleton<FileStore>();
 builder.Services.AddScoped<ObfuscateJob>();
 builder.Services.AddScoped<CleanupJob>();
 
-// Obfuscation runs in the separate obfuscation-service; the API reaches it over HTTP (URL injected
-// by Aspire as Obfuscation:Url). RemoveAllResilienceHandlers opts this client out of the 30s
-// standard-resilience cap — obfuscation can take minutes.
 var obfuscationUrl = builder.Configuration["Obfuscation:Url"] ?? "http://localhost:8743";
-#pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is the supported way to opt out of the 30s default cap
+#pragma warning disable EXTEXP0001
 builder.Services.AddHttpClient("obfuscation", client =>
 {
     client.BaseAddress = new Uri(obfuscationUrl);
@@ -61,9 +56,6 @@ builder.Services.AddRateLimiter(options =>
 var app = builder.Build();
 
 app.UseExceptionHandler();
-
-// Serve the built SPA (copied into wwwroot at publish by PublishWithContainerFiles). API routes win;
-// anything else falls back to index.html for client-side routing.
 app.UseStaticFiles();
 
 app.MapDefaultEndpoints();
@@ -71,14 +63,11 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
 app.UseRateLimiter();
-
-// Lock /hangfire behind Cloudflare Access before exposing publicly.
 app.UseHangfireDashboard("/hangfire");
 
 app.MapControllers();
 app.MapFallbackToFile("index.html");
 
-// Register after the app is serving — AddOrUpdate hits Postgres and must not block startup.
 app.Lifetime.ApplicationStarted.Register(() =>
     RecurringJob.AddOrUpdate<CleanupJob>("cleanup", j => j.RunAsync(CancellationToken.None), Cron.Hourly));
 

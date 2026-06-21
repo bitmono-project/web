@@ -4,8 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BitMono.Web.Api.Controllers;
 
-// /version and /protections are owned by the obfuscation-service (it runs BitMono). We proxy them
-// so the frontend keeps hitting the web origin.
 [ApiController]
 public sealed class MetaController(IHttpClientFactory factory) : ControllerBase
 {
