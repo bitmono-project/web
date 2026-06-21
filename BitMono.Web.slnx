@@ -1,10 +1,12 @@
 <Solution>
+  <Folder Name="/aspire/">
+    <Project Path="BitMono.Web.AppHost/BitMono.Web.AppHost.csproj" />
+    <Project Path="BitMono.Web.MigrationService/BitMono.Web.MigrationService.csproj" />
+    <Project Path="BitMono.Web.ServiceDefaults/BitMono.Web.ServiceDefaults.csproj" />
+  </Folder>
   <Folder Name="/test/">
     <Project Path="test/BitMono.Web.Tests/BitMono.Web.Tests.csproj" />
   </Folder>
   <Project Path="BitMono.Web.Api/BitMono.Web.Api.csproj" />
-  <Project Path="BitMono.Web.AppHost/BitMono.Web.AppHost.csproj" />
   <Project Path="BitMono.Web.Data/BitMono.Web.Data.csproj" />
-  <Project Path="BitMono.Web.MigrationService/BitMono.Web.MigrationService.csproj" />
-  <Project Path="BitMono.Web.ServiceDefaults/BitMono.Web.ServiceDefaults.csproj" />
 </Solution>
