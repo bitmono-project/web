@@ -39,7 +39,7 @@ builder.Services.AddScoped<CleanupJob>();
 // Obfuscation runs in the separate obfuscation-service; the API reaches it over HTTP (URL injected
 // by Aspire as Obfuscation:Url). RemoveAllResilienceHandlers opts this client out of the 30s
 // standard-resilience cap — obfuscation can take minutes.
-var obfuscationUrl = builder.Configuration["Obfuscation:Url"] ?? "http://localhost:8080";
+var obfuscationUrl = builder.Configuration["Obfuscation:Url"] ?? "http://localhost:8743";
 #pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is the supported way to opt out of the 30s default cap
 builder.Services.AddHttpClient("obfuscation", client =>
 {
@@ -62,6 +62,10 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+// Serve the built SPA (copied into wwwroot at publish by PublishWithContainerFiles). API routes win;
+// anything else falls back to index.html for client-side routing.
+app.UseStaticFiles();
+
 app.MapDefaultEndpoints();
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
@@ -72,6 +76,7 @@ app.UseRateLimiter();
 app.UseHangfireDashboard("/hangfire");
 
 app.MapControllers();
+app.MapFallbackToFile("index.html");
 
 // Register after the app is serving — AddOrUpdate hits Postgres and must not block startup.
 app.Lifetime.ApplicationStarted.Register(() =>
