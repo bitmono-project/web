@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using BitMono.Web.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace BitMono.Web.MigrationService;
 
@@ -9,6 +10,7 @@ public class Worker(
     IServiceProvider serviceProvider,
     IHostApplicationLifetime lifetime,
     IHostEnvironment environment,
+    IConfiguration configuration,
     ILogger<Worker> logger) : BackgroundService
 {
     public const string ActivitySourceName = "Migrations";
@@ -16,9 +18,17 @@ public class Worker(
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        using var activity = ActivitySource.StartActivity("Migrating appdb", ActivityKind.Client);
+        using var activity = ActivitySource.StartActivity("Migrating databases", ActivityKind.Client);
         try
         {
+            var dbConnectionString = configuration.GetConnectionString("db")
+                ?? throw new InvalidOperationException("Connection string 'db' not found.");
+            var appdbConnectionString = configuration.GetConnectionString("appdb")
+                ?? throw new InvalidOperationException("Connection string 'appdb' not found.");
+
+            await PostgresDatabaseBootstrap.EnsureExistsAsync(dbConnectionString, logger, ct);
+            await PostgresDatabaseBootstrap.EnsureExistsAsync(appdbConnectionString, logger, ct);
+
             await using var scope = serviceProvider.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
 

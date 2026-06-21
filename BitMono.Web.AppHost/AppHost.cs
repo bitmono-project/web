@@ -45,8 +45,10 @@ if (!runMode)
 }
 
 var migrations = builder.AddProject<Projects.BitMono_Web_MigrationService>("migrations")
+    .WithReference(db)
     .WithReference(appdb)
     .WithEnvironment("DOTNET_hostBuilder__reloadConfigOnChange", "false")
+    .WaitFor(db)
     .WaitFor(appdb);
 
 var api = builder.AddProject<Projects.BitMono_Web_Api>("api", project => project.ExcludeLaunchProfile = true)
