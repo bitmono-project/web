@@ -58,7 +58,7 @@ else
         .WaitFor(appdb);
 }
 
-var api = builder.AddProject<Projects.BitMono_Web_Api>("api", launchProfileName: "http")
+var api = builder.AddProject<Projects.BitMono_Web_Api>("api", project => project.ExcludeLaunchProfile = true)
     .WithReference(db)
     .WithReference(redis)
     .WithReference(appdb)
@@ -76,6 +76,7 @@ var frontend = builder.AddViteApp("web", "../frontend")
 
 if (runMode)
 {
+    api.WithHttpEndpoint(name: "http");
     frontend.WithExternalHttpEndpoints();
 }
 else
