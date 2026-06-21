@@ -77,7 +77,6 @@ var frontend = builder.AddViteApp("web", "../frontend")
 if (runMode)
 {
     api.WithHttpEndpoint(name: "http");
-    frontend.WithExternalHttpEndpoints();
 }
 else
 {
@@ -85,6 +84,8 @@ else
         .WithEnvironment("DOTNET_USE_POLLING_FILE_WATCHER", "1")
         .WithExternalHttpEndpoints();
 }
+
+frontend.WithExternalHttpEndpoints();
 
 #pragma warning disable ASPIREJAVASCRIPT001
 api.PublishWithContainerFiles(frontend, "wwwroot");
