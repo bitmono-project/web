@@ -8,14 +8,13 @@ const apiUrl = process.env.API_URL ?? 'http://api:8430';
 const port = Number(process.env.PORT ?? 8429);
 
 const app = express();
-const proxy = createProxyMiddleware({
+// http-proxy-middleware v3 no longer re-adds Express mount paths — proxy at root with pathFilter
+// so /protections, /version, and /obfuscate/* reach the API with the full path intact.
+app.use(createProxyMiddleware({
   target: apiUrl,
   changeOrigin: true,
-});
-
-app.use('/obfuscate', proxy);
-app.use('/version', proxy);
-app.use('/protections', proxy);
+  pathFilter: ['/obfuscate', '/version', '/protections'],
+}));
 app.use(express.static(path.join(__dirname, 'dist')));
 app.use((_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
