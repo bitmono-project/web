@@ -1,6 +1,7 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
 const string RestartUnlessStopped = "--restart=unless-stopped";
+const int ApiDeployPort = 8742;
 
 var config = builder.Configuration;
 var runMode = builder.ExecutionContext.IsRunMode;
@@ -90,7 +91,7 @@ else
         .WithReference(db)
         .WithReference(redis)
         .WithReference(appdb)
-        .WithHttpEndpoint(targetPort: 8080, name: "http", env: "HTTP_PORTS")
+        .WithHttpEndpoint(port: ApiDeployPort, targetPort: ApiDeployPort, name: "http", env: "HTTP_PORTS")
         .WithEnvironment("Obfuscation__Url", obfuscation.GetEndpoint("http"))
         .WithEnvironment("DOTNET_hostBuilder__reloadConfigOnChange", "false")
         .WithEnvironment("DOTNET_USE_POLLING_FILE_WATCHER", "1")
