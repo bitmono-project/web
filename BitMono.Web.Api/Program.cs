@@ -62,10 +62,6 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
-// Serve the built SPA (copied into wwwroot at publish by PublishWithContainerFiles). API routes win;
-// anything else falls back to index.html (see MapFallbackToFile below) for client-side routing.
-app.UseStaticFiles();
-
 app.MapDefaultEndpoints();
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
@@ -76,7 +72,6 @@ app.UseRateLimiter();
 app.UseHangfireDashboard("/hangfire");
 
 app.MapControllers();
-app.MapFallbackToFile("index.html");
 
 // Register after the app is serving — AddOrUpdate hits Postgres and must not block startup.
 app.Lifetime.ApplicationStarted.Register(() =>
