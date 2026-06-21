@@ -1,7 +1,7 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
 const string RestartUnlessStopped = "--restart=unless-stopped";
-const int ApiDeployPort = 8742;
+const int ApiDeployPort = 8430;
 const int ObfuscationPort = 8743;
 
 var config = builder.Configuration;
