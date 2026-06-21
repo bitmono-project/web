@@ -9,7 +9,6 @@ const int ObfuscationPort = 8743;
 
 var config = builder.Configuration;
 var runMode = builder.ExecutionContext.IsRunMode;
-var imageOwner = config["OWNER_LC"] ?? "bitmono-project";
 var imageTag = config["IMAGE_TAG_SUFFIX"] ?? "dev";
 
 builder.AddDockerComposeEnvironment("bitmono")
@@ -45,42 +44,10 @@ if (!runMode)
     obfuscation.WithContainerRuntimeArgs(RestartUnlessStopped);
 }
 
-IResourceBuilder<IResourceWithWaitSupport> migrations;
-if (runMode)
-{
-    var migrationsBuilder = builder.AddProject<Projects.BitMono_Web_MigrationService>("migrations")
-        .WithReference(appdb)
-        .WithEnvironment("DOTNET_hostBuilder__reloadConfigOnChange", "false")
-        .WaitFor(appdb);
-
-    if (!string.IsNullOrEmpty(imageTag))
-    {
-        migrationsBuilder.WithImagePushOptions(context =>
-        {
-            context.Options.RemoteImageTag = imageTag;
-        });
-    }
-
-    migrations = migrationsBuilder;
-}
-else
-{
-    var migrationsBuilder = builder.AddContainer("migrations", $"ghcr.io/{imageOwner}/web-migrations:latest")
-        .WithReference(appdb)
-        .WithEnvironment("DOTNET_hostBuilder__reloadConfigOnChange", "false")
-        .WithContainerRuntimeArgs(RestartUnlessStopped)
-        .WaitFor(appdb);
-
-    if (!string.IsNullOrEmpty(imageTag))
-    {
-        migrationsBuilder.WithImagePushOptions(async context =>
-        {
-            context.Options.RemoteImageTag = imageTag;
-        });
-    }
-
-    migrations = migrationsBuilder;
-}
+var migrations = builder.AddProject<Projects.BitMono_Web_MigrationService>("migrations")
+    .WithReference(appdb)
+    .WithEnvironment("DOTNET_hostBuilder__reloadConfigOnChange", "false")
+    .WaitFor(appdb);
 
 var api = builder.AddProject<Projects.BitMono_Web_Api>("api", project => project.ExcludeLaunchProfile = true)
     .WithReference(db)
@@ -93,15 +60,8 @@ var api = builder.AddProject<Projects.BitMono_Web_Api>("api", project => project
     .WaitFor(obfuscation)
     .WaitForCompletion(migrations);
 
-if (!string.IsNullOrEmpty(imageTag))
-{
-    api.WithImagePushOptions(context =>
-    {
-        context.Options.RemoteImageTag = imageTag;
-    });
-}
-
 IResourceBuilder<IResourceWithEndpoints> web;
+IResourceBuilder<ContainerResource>? deployWeb = null;
 if (runMode)
 {
     api.WithHttpEndpoint(name: "http");
@@ -118,7 +78,7 @@ else
     api.WithHttpEndpoint(port: ApiDeployPort, targetPort: ApiDeployPort, name: "http", env: "HTTP_PORTS")
         .WithEnvironment("DOTNET_USE_POLLING_FILE_WATCHER", "1");
 
-    var webBuilder = builder.AddDockerfile("web", "../frontend")
+    deployWeb = builder.AddDockerfile("web", "../frontend")
         .WithHttpEndpoint(port: WebDeployPort, targetPort: WebDeployPort, env: "PORT")
         .WithBuildArg("APP_VERSION", imageTag)
         .WithEnvironment("API_URL", api.GetEndpoint("http"))
@@ -127,15 +87,26 @@ else
         .WithContainerRuntimeArgs(RestartUnlessStopped)
         .WithExternalHttpEndpoints();
 
-    if (!string.IsNullOrEmpty(imageTag))
+    web = deployWeb;
+}
+
+if (!string.IsNullOrEmpty(imageTag))
+{
+    api.WithImagePushOptions(context =>
     {
-        webBuilder.WithImagePushOptions(async context =>
+        context.Options.RemoteImageTag = imageTag;
+    });
+    migrations.WithImagePushOptions(context =>
+    {
+        context.Options.RemoteImageTag = imageTag;
+    });
+    if (deployWeb is not null)
+    {
+        deployWeb.WithImagePushOptions(async context =>
         {
             context.Options.RemoteImageTag = imageTag;
         });
     }
-
-    web = webBuilder;
 }
 
 builder.Build().Run();
