@@ -2,7 +2,6 @@
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-const string RestartUnlessStopped = "--restart=unless-stopped";
 const int WebDeployPort = 8429;
 const int ApiDeployPort = 8430;
 const int ObfuscationPort = 8743;
@@ -19,7 +18,8 @@ var postgres = builder.AddPostgres("postgres")
     .WithLifetime(ContainerLifetime.Persistent);
 if (!runMode)
 {
-    postgres.WithPassword(builder.AddParameter("DatabasePassword", secret: true));
+    postgres.WithPassword(builder.AddParameter("DatabasePassword", secret: true))
+        .PublishAsDockerComposeService((_, service) => service.Restart = "always");
 }
 var db = postgres.AddDatabase("db");
 var appdb = postgres.AddDatabase("appdb");
@@ -29,7 +29,8 @@ var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent);
 if (!runMode)
 {
-    redis.WithPassword(builder.AddParameter("RedisPassword", secret: true));
+    redis.WithPassword(builder.AddParameter("RedisPassword", secret: true))
+        .PublishAsDockerComposeService((_, service) => service.Restart = "always");
 }
 
 var obfuscationPath = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", "obfuscation-service"));
@@ -41,7 +42,7 @@ var obfuscation = (runMode && Directory.Exists(obfuscationPath)
 
 if (!runMode)
 {
-    obfuscation.WithContainerRuntimeArgs(RestartUnlessStopped);
+    obfuscation.PublishAsDockerComposeService((_, service) => service.Restart = "always");
 }
 
 var migrations = builder.AddProject<Projects.BitMono_Web_MigrationService>("migrations")
@@ -78,7 +79,8 @@ if (runMode)
 else
 {
     api.WithHttpEndpoint(port: ApiDeployPort, targetPort: ApiDeployPort, name: "http", env: "HTTP_PORTS")
-        .WithEnvironment("DOTNET_USE_POLLING_FILE_WATCHER", "1");
+        .WithEnvironment("DOTNET_USE_POLLING_FILE_WATCHER", "1")
+        .PublishAsDockerComposeService((_, service) => service.Restart = "always");
 
     deployWeb = builder.AddDockerfile("web", "../frontend")
         .WithHttpEndpoint(port: WebDeployPort, targetPort: WebDeployPort, env: "PORT")
@@ -86,7 +88,7 @@ else
         .WithEnvironment("API_URL", api.GetEndpoint("http"))
         .WithReference(api)
         .WaitFor(api)
-        .WithContainerRuntimeArgs(RestartUnlessStopped)
+        .PublishAsDockerComposeService((_, service) => service.Restart = "always")
         .WithExternalHttpEndpoints();
 
     web = deployWeb;
