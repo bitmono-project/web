@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { type UserProfile, type ProfileCrackme, getUserProfile, getUserCrackmes, difficultyLabel, formatDate } from '../lib/crackmes'
+import { RanksDialog } from '../components/RanksDialog'
 
 export default function Profile() {
   const { handle = '' } = useParams()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [crackmes, setCrackmes] = useState<ProfileCrackme[]>([])
   const [state, setState] = useState<'loading' | 'ok' | 'missing'>('loading')
+  const [ranksOpen, setRanksOpen] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -27,15 +29,6 @@ export default function Profile() {
     </main>
   )
 
-  const stats = [
-    { label: 'Points', value: profile.points.toLocaleString() },
-    { label: 'Rank', value: profile.rankName },
-    { label: 'Solved', value: String(profile.solves) },
-    { label: 'Authored', value: String(profile.authored) },
-    { label: 'Writeups', value: String(profile.writeups) },
-    { label: 'Position', value: profile.position ? `#${profile.position}` : '—' },
-  ]
-
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <div className="flex flex-wrap items-center gap-4">
@@ -53,13 +46,21 @@ export default function Profile() {
       </div>
 
       <div className="mt-8 grid grid-cols-3 gap-3 sm:grid-cols-6">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-xl border border-line bg-surface/30 p-4 text-center">
-            <div className="font-display text-2xl font-bold text-ink">{s.value}</div>
-            <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-faint">{s.label}</div>
-          </div>
-        ))}
+        <StatCard label="Points" value={profile.points.toLocaleString()} />
+        <button
+          onClick={() => setRanksOpen(true)}
+          className="rounded-xl border border-line bg-surface/30 p-4 text-center transition-colors hover:border-acid/40"
+        >
+          <div className="truncate font-display text-base font-bold text-acid" title={profile.rankName}>{profile.rankName}</div>
+          <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-faint">Rank ↗</div>
+        </button>
+        <StatCard label="Solved" value={String(profile.solves)} />
+        <StatCard label="Authored" value={String(profile.authored)} />
+        <StatCard label="Writeups" value={String(profile.writeups)} />
+        <StatCard label="Position" value={profile.position ? `#${profile.position}` : '—'} />
       </div>
+
+      {ranksOpen && <RanksDialog points={profile.points} onClose={() => setRanksOpen(false)} />}
 
       <h2 className="mb-3 mt-12 font-display text-2xl font-bold text-ink">Authored crackmes</h2>
       {crackmes.length === 0 ? (
@@ -76,5 +77,15 @@ export default function Profile() {
         </div>
       )}
     </main>
+  )
+}
+
+// Defensive truncate + title so an unexpectedly long value never blows out the fixed-width card.
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface/30 p-4 text-center">
+      <div className="truncate font-display text-2xl font-bold text-ink" title={value}>{value}</div>
+      <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-faint">{label}</div>
+    </div>
   )
 }

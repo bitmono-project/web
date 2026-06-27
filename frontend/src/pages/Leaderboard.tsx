@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { type LeaderboardEntry, type MyRank, getLeaderboard, getMyRank } from '../lib/crackmes'
+import { RanksDialog } from '../components/RanksDialog'
 
 const SCOPES = [
   { value: '', label: 'Overall' },
@@ -17,6 +18,7 @@ export default function Leaderboard() {
   const [items, setItems] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [mine, setMine] = useState<MyRank | null>(null)
+  const [ranksOpen, setRanksOpen] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -36,7 +38,7 @@ export default function Leaderboard() {
 
       {me && mine && (
         <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-acid/30 bg-acid/5 p-4 font-mono text-[13px]">
-          <span className="text-acid">{mine.rankName}</span>
+          <button onClick={() => setRanksOpen(true)} className="text-acid hover:underline">{mine.rankName}</button>
           <span className="text-muted">{mine.points.toLocaleString()} pts</span>
           <span className="text-faint">{mine.solves} solved</span>
           {mine.position && <span className="text-faint">· #{mine.position}</span>}
@@ -93,7 +95,7 @@ export default function Leaderboard() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-muted">{e.rankName}</td>
+                  <td className="whitespace-nowrap px-4 py-2 text-muted">{e.rankName}</td>
                   <td className="px-4 py-2 text-right text-faint">{e.solves}</td>
                   <td className="px-4 py-2 text-right text-acid">{e.points.toLocaleString()}</td>
                 </tr>
@@ -102,6 +104,7 @@ export default function Leaderboard() {
           </table>
         </div>
       )}
+      {ranksOpen && mine && <RanksDialog points={mine.points} onClose={() => setRanksOpen(false)} />}
     </main>
   )
 }

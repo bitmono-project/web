@@ -25,9 +25,9 @@ export default function Home() {
   return (
     <main className="mx-auto max-w-6xl px-6">
       <section className="pt-14 pb-10 text-center md:pt-24">
-        <div className="rise inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.22em] text-muted" style={d(0)}>
-          <span className="h-1.5 w-1.5 rounded-full bg-acid" /> free &amp; open-source
-        </div>
+        <a href="https://github.com/bitmono-project" target="_blank" rel="noopener noreferrer" className="rise inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.22em] text-muted transition-colors hover:border-acid/40 hover:text-ink" style={d(0)}>
+          <span className="h-1.5 w-1.5 rounded-full bg-acid" /> free &amp; open-source ↗
+        </a>
 
         <h1 className="rise mx-auto mt-7 max-w-4xl font-display text-5xl font-extrabold leading-[0.95] tracking-tight md:text-7xl" style={d(80)}>
           Obfuscate your <span className="text-acid acid-glow"><TextScramble text=".NET" durationMs={1200} /></span>
