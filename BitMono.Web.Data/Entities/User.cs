@@ -11,6 +11,10 @@ public class User
     [Required, MaxLength(20)] public string Provider { get; set; } = null!;      // discord | github | dev
     [Required, MaxLength(100)] public string ProviderUserId { get; set; } = null!;
     [Required, MaxLength(80)] public string DisplayName { get; set; } = null!;
+    // Immutable, unique, URL-safe slug for the public profile. DisplayName is rewritten from OAuth
+    // on every login, so it can't be the route key. Assigned once on first sight; nullable for
+    // pre-existing rows until their next login.
+    [MaxLength(80)] public string? Handle { get; set; }
     [MaxLength(400)] public string? AvatarUrl { get; set; }
     [MaxLength(200)] public string? Email { get; set; }
 

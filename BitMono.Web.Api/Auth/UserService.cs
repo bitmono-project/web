@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using BitMono.Web.Api.Helpers;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -28,6 +29,7 @@ public sealed class UserService(IServiceScopeFactory scopeFactory)
                 Provider = provider,
                 ProviderUserId = providerUserId,
                 DisplayName = Trim(displayName, 80),
+                Handle = await UniqueHandleAsync(db, displayName, ct),
                 AvatarUrl = avatarUrl,
                 Email = email,
                 Role = roleOverride ?? UserRole.User,
@@ -39,6 +41,8 @@ public sealed class UserService(IServiceScopeFactory scopeFactory)
         else
         {
             user.DisplayName = Trim(displayName, 80);
+            if (string.IsNullOrEmpty(user.Handle)) // backfill pre-existing accounts on their next login
+                user.Handle = await UniqueHandleAsync(db, user.DisplayName, ct);
             if (avatarUrl is not null) user.AvatarUrl = avatarUrl;
             if (email is not null) user.Email = email;
             if (roleOverride is { } role) user.Role = role;
@@ -47,6 +51,17 @@ public sealed class UserService(IServiceScopeFactory scopeFactory)
 
         await db.SaveChangesAsync(ct);
         return user;
+    }
+
+    // A handle slugged from the display name, de-duplicated like crackme slugs (-2, -3, ...).
+    private static async Task<string> UniqueHandleAsync(CrackmesDbContext db, string displayName, CancellationToken ct)
+    {
+        var baseHandle = Slug.From(displayName);
+        var handle = baseHandle;
+        var n = 1;
+        while (await db.Users.AnyAsync(u => u.Handle == handle, ct))
+            handle = $"{baseHandle}-{++n}";
+        return handle;
     }
 
     public static ClaimsPrincipal BuildPrincipal(User user)

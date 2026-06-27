@@ -58,6 +58,7 @@ export interface CrackmeDetail {
   takedownReason: string | null
   takenDownAt: string | null
   solvedByMe: boolean
+  authorHandle: string | null
 }
 
 // Crackme lifecycle status (camelCased from the server enum).
@@ -184,6 +185,7 @@ export async function unmarkSolved(slug: string): Promise<SolveResult | null> {
 export interface LeaderboardEntry {
   rank: number
   userId: string
+  handle: string | null
   displayName: string
   avatar: string | null
   points: number
@@ -213,6 +215,41 @@ export interface MyRank {
 export async function getMyRank(): Promise<MyRank | null> {
   const res = await fetch('/api/progression/my-rank')
   return res.ok ? ((await res.json()) as MyRank) : null
+}
+
+// --- public profiles ---
+
+export interface UserProfile {
+  handle: string
+  displayName: string
+  avatar: string | null
+  role: string
+  joinedAt: string
+  points: number
+  rankName: string
+  position: number | null
+  solves: number
+  authored: number
+  writeups: number
+}
+
+export interface ProfileCrackme {
+  slug: string
+  title: string
+  difficulty: string
+  downloadCount: number
+  solvedCount: number
+  publishedAt: string
+}
+
+export async function getUserProfile(handle: string): Promise<UserProfile | null> {
+  const res = await fetch(`/api/users/${encodeURIComponent(handle)}`)
+  return res.ok ? ((await res.json()) as UserProfile) : null
+}
+
+export async function getUserCrackmes(handle: string): Promise<ProfileCrackme[]> {
+  const res = await fetch(`/api/users/${encodeURIComponent(handle)}/crackmes`)
+  return res.ok ? ((await res.json()) as ProfileCrackme[]) : []
 }
 
 // --- moderation (moderator/admin only) ---

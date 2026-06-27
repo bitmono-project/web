@@ -3,6 +3,7 @@ namespace BitMono.Web.Api.Models;
 public sealed record LeaderboardEntry(
     int Rank,
     Guid UserId,
+    string? Handle,
     string DisplayName,
     string? Avatar,
     int Points,

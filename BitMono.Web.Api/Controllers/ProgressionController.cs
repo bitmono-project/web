@@ -13,6 +13,7 @@ namespace BitMono.Web.Api.Controllers;
 public sealed class ProgressionController(IServiceScopeFactory scopeFactory) : ControllerBase
 {
     private const int PageSize = 50;
+    private const string UnknownUser = "unknown"; // defensive fallback if a ranked user row is missing
 
     // scope: overall (default, uses the User.Points cache) | monthly (last 30 days) | dotnet (.NET-family crackmes)
     [HttpGet("leaderboard")]
@@ -57,14 +58,14 @@ public sealed class ProgressionController(IServiceScopeFactory scopeFactory) : C
 
         var idList = ranked.Select(r => r.UserId).ToList();
         var info = (await db.Users.AsNoTracking().Where(u => idList.Contains(u.Id))
-                .Select(u => new { u.Id, u.DisplayName, u.AvatarUrl }).ToListAsync(ct))
-            .ToDictionary(u => u.Id, u => (u.DisplayName, u.AvatarUrl));
+                .Select(u => new { u.Id, u.DisplayName, u.AvatarUrl, u.Handle }).ToListAsync(ct))
+            .ToDictionary(u => u.Id, u => (u.DisplayName, u.AvatarUrl, u.Handle));
 
         var items = ranked.Select((r, i) =>
         {
             info.TryGetValue(r.UserId, out var u);
             return new LeaderboardEntry(
-                (page - 1) * PageSize + i + 1, r.UserId, u.DisplayName ?? "unknown", u.AvatarUrl,
+                (page - 1) * PageSize + i + 1, r.UserId, u.Handle, u.DisplayName ?? UnknownUser, u.AvatarUrl,
                 r.Points, r.Solves, Ranks.For(r.Points).Name);
         }).ToList();
 

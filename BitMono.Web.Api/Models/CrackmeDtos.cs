@@ -67,7 +67,8 @@ public sealed record CrackmeDetail(
     CrackmeStatus Status,
     string? TakedownReason,
     DateTime? TakenDownAt,
-    bool SolvedByMe);
+    bool SolvedByMe,
+    string? AuthorHandle);
 
 // The uploader's view of their own submission — unlike the public detail it includes non-public
 // statuses (pending/rejected/taken-down) and the moderator's feedback, so they know where it stands.

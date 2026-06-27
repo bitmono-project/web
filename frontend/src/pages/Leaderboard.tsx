@@ -81,10 +81,17 @@ export default function Leaderboard() {
                 <tr key={e.userId} className="border-b border-line/60 last:border-0">
                   <td className="px-4 py-2 text-faint">{medal(e.rank)}</td>
                   <td className="px-4 py-2 text-ink">
-                    <span className="flex items-center gap-2">
-                      {e.avatar && <img src={e.avatar} alt="" className="h-5 w-5 rounded-full" />}
-                      {e.displayName}
-                    </span>
+                    {e.handle ? (
+                      <Link to={`/user/${e.handle}`} className="flex items-center gap-2 transition-colors hover:text-acid">
+                        {e.avatar && <img src={e.avatar} alt="" className="h-5 w-5 rounded-full" />}
+                        {e.displayName}
+                      </Link>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        {e.avatar && <img src={e.avatar} alt="" className="h-5 w-5 rounded-full" />}
+                        {e.displayName}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-muted">{e.rankName}</td>
                   <td className="px-4 py-2 text-right text-faint">{e.solves}</td>

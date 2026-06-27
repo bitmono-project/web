@@ -52,7 +52,11 @@ export default function CrackmeDetail() {
       <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">{c.title}</h1>
-          <p className="mt-1 font-mono text-sm text-muted">by {c.author}</p>
+          <p className="mt-1 font-mono text-sm text-muted">
+            by {c.authorHandle
+              ? <Link to={`/user/${c.authorHandle}`} className="text-muted transition-colors hover:text-acid">{c.author}</Link>
+              : c.author}
+          </p>
         </div>
         <div className="text-right">
           <a href={`/api/crackmes/${c.slug}/download`} className="btn-acid">download ↓</a>

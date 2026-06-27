@@ -104,8 +104,11 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var counts = raw.GroupBy(r => r.Emoji).ToDictionary(g => g.Key, g => g.Count());
         var mine = uid is null ? [] : raw.Where(r => r.UserId == uid).Select(r => r.Emoji).ToList();
         var solvedByMe = uid is not null && await db.Solves.AsNoTracking().AnyAsync(x => x.UserId == uid && x.CrackmeId == c.Id, ct);
+        var authorHandle = c.UploaderUserId is { } up
+            ? await db.Users.AsNoTracking().Where(u => u.Id == up).Select(u => u.Handle).FirstOrDefaultAsync(ct)
+            : null;
 
-        return ToDetail(c, isOwner: uid is not null && uid == c.UploaderUserId, counts, mine, solvedByMe);
+        return ToDetail(c, isOwner: uid is not null && uid == c.UploaderUserId, counts, mine, solvedByMe, authorHandle);
     }
 
     [HttpPost("{slug}/solve")]
@@ -475,7 +478,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.SizeBytes, c.DownloadCount, c.SolvedCount, solutions, comments,
         c.IsBitMonoObfuscated, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt);
 
-    private static CrackmeDetail ToDetail(Crackme c, bool isOwner, IReadOnlyDictionary<string, int> reactions, IReadOnlyList<string> myReactions, bool solvedByMe) => new(
+    private static CrackmeDetail ToDetail(Crackme c, bool isOwner, IReadOnlyDictionary<string, int> reactions, IReadOnlyList<string> myReactions, bool solvedByMe, string? authorHandle) => new(
         c.Id, c.Slug, c.Title, c.Description, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
         c.TargetPlatform, c.DotnetRuntime, c.Language,
         c.AuthorDifficulty, Avg(c.DifficultySum, c.DifficultyCount), c.DifficultyCount,
@@ -483,7 +486,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.SizeBytes, c.OriginalFileName, c.DownloadCount, c.SolvedCount,
         c.IsBitMonoObfuscated, c.Preset, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt,
         isOwner, c.ReactionsEnabled, c.CommentReactionsEnabled, reactions, myReactions,
-        c.Status, c.TakedownReason, c.TakenDownAt, solvedByMe);
+        c.Status, c.TakedownReason, c.TakenDownAt, solvedByMe, authorHandle);
 
     // A stripped-down detail for a taken-down crackme: keep title/author so the page still means
     // something, but drop description/download/reactions and surface the takedown reason.
@@ -497,7 +500,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         PublishedAt: c.PublishedAt ?? c.CreatedAt, IsOwner: false,
         ReactionsEnabled: false, CommentReactionsEnabled: false,
         Reactions: new Dictionary<string, int>(), MyReactions: [],
-        Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt, SolvedByMe: false);
+        Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt, SolvedByMe: false, AuthorHandle: null);
 
     private Guid? CurrentUserId() =>
         User.Identity?.IsAuthenticated == true && Guid.TryParse(User.FindFirstValue("uid"), out var id) ? id : null;
