@@ -158,3 +158,57 @@ export async function rejectCrackme(id: string, message: string): Promise<boolea
 }
 
 export const moderationFileUrl = (id: string): string => `/api/moderation/${id}/file`
+
+// --- comments + ratings ---
+
+export interface CommentItem {
+  id: string
+  author: string
+  body: string
+  isSpoiler: boolean
+  createdAt: string
+}
+
+export interface RatingResult {
+  avgDifficulty: number | null
+  difficultyCount: number
+  avgQuality: number | null
+  qualityCount: number
+}
+
+export interface MyRating {
+  difficulty: number | null
+  quality: number | null
+}
+
+export async function getComments(slug: string): Promise<CommentItem[]> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/comments`)
+  if (!res.ok) return []
+  return (await res.json()) as CommentItem[]
+}
+
+export async function postComment(slug: string, body: string, isSpoiler: boolean): Promise<CommentItem | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body, isSpoiler }),
+  })
+  if (!res.ok) return null
+  return (await res.json()) as CommentItem
+}
+
+export async function getMyRating(slug: string): Promise<MyRating | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/my-rating`)
+  if (!res.ok) return null
+  return (await res.json()) as MyRating
+}
+
+export async function rateCrackme(slug: string, difficulty: number, quality: number): Promise<RatingResult | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/rate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ difficulty, quality }),
+  })
+  if (!res.ok) return null
+  return (await res.json()) as RatingResult
+}

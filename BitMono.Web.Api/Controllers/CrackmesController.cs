@@ -1,9 +1,12 @@
 using System.Linq.Expressions;
+using System.Security.Claims;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace BitMono.Web.Api.Controllers;
@@ -90,6 +93,129 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.DownloadCount, x => x.DownloadCount + 1), ct);
 
         return File(zip, "application/zip", $"{c.Slug}.zip");
+    }
+
+    [HttpGet("{slug}/comments")]
+    public async Task<ActionResult<IReadOnlyList<CommentItem>>> Comments(string slug, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var id = await PublicIdAsync(db, slug, ct);
+        if (id is null)
+            return NotFound();
+
+        var comments = await db.Comments.AsNoTracking()
+            .Where(c => c.CrackmeId == id && !c.IsDeleted && !c.IsHidden)
+            .OrderBy(c => c.CreatedAt)
+            .Select(c => new CommentItem(c.Id, c.AnonymousHandle ?? "anonymous", c.Body, c.IsSpoiler, c.CreatedAt))
+            .ToListAsync(ct);
+        return Ok(comments);
+    }
+
+    [HttpPost("{slug}/comments")]
+    [Authorize]
+    [EnableRateLimiting("comment")]
+    public async Task<ActionResult<CommentItem>> AddComment(string slug, [FromBody] CommentCreateRequest req, CancellationToken ct)
+    {
+        var body = req.Body?.Trim();
+        if (string.IsNullOrEmpty(body))
+            return BadRequest("Comment can't be empty.");
+        if (body.Length > 4000)
+            body = body[..4000];
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var crackme = await db.Crackmes.AsNoTracking().Where(Public).FirstOrDefaultAsync(c => c.Slug == slug, ct);
+        if (crackme is null)
+            return NotFound();
+
+        var now = DateTime.UtcNow;
+        var comment = new Comment
+        {
+            Id = Guid.NewGuid(),
+            CrackmeId = crackme.Id,
+            AuthorUserId = Guid.Parse(User.FindFirstValue("uid")!),
+            AnonymousHandle = User.Identity?.Name ?? "anonymous",
+            Body = body,
+            IsSpoiler = req.IsSpoiler,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.Comments.Add(comment);
+        await db.SaveChangesAsync(ct);
+        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, comment.Body, comment.IsSpoiler, comment.CreatedAt));
+    }
+
+    [HttpGet("{slug}/my-rating")]
+    [Authorize]
+    public async Task<ActionResult<MyRating>> GetMyRating(string slug, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var id = await PublicIdAsync(db, slug, ct);
+        if (id is null)
+            return NotFound();
+
+        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var rating = await db.Ratings.AsNoTracking().FirstOrDefaultAsync(r => r.CrackmeId == id && r.VoterUserId == uid, ct);
+        return Ok(new MyRating(rating?.Difficulty, rating?.Quality));
+    }
+
+    [HttpPost("{slug}/rate")]
+    [Authorize]
+    public async Task<ActionResult<RatingResult>> Rate(string slug, [FromBody] RatingRequest req, CancellationToken ct)
+    {
+        if (req.Difficulty is < 1 or > 6 || req.Quality is < 1 or > 6)
+            return BadRequest("Difficulty and quality must be 1–6.");
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var crackme = await db.Crackmes.Where(Public).FirstOrDefaultAsync(c => c.Slug == slug, ct);
+        if (crackme is null)
+            return NotFound();
+
+        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var rating = await db.Ratings.FirstOrDefaultAsync(r => r.CrackmeId == crackme.Id && r.VoterUserId == uid, ct);
+        var now = DateTime.UtcNow;
+
+        if (rating is null)
+        {
+            db.Ratings.Add(new Rating
+            {
+                Id = Guid.NewGuid(),
+                CrackmeId = crackme.Id,
+                VoterUserId = uid,
+                Difficulty = req.Difficulty,
+                Quality = req.Quality,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            crackme.DifficultySum += req.Difficulty;
+            crackme.DifficultyCount++;
+            crackme.QualitySum += req.Quality;
+            crackme.QualityCount++;
+        }
+        else
+        {
+            crackme.DifficultySum += req.Difficulty - rating.Difficulty;
+            crackme.QualitySum += req.Quality - rating.Quality;
+            rating.Difficulty = req.Difficulty;
+            rating.Quality = req.Quality;
+            rating.UpdatedAt = now;
+        }
+        crackme.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+
+        return Ok(new RatingResult(
+            Avg(crackme.DifficultySum, crackme.DifficultyCount), crackme.DifficultyCount,
+            Avg(crackme.QualitySum, crackme.QualityCount), crackme.QualityCount));
+    }
+
+    private static async Task<Guid?> PublicIdAsync(CrackmesDbContext db, string slug, CancellationToken ct)
+    {
+        var match = await db.Crackmes.AsNoTracking().Where(Public)
+            .Where(x => x.Slug == slug).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(ct);
+        return match;
     }
 
     private static readonly Expression<Func<Crackme, bool>> Public =
