@@ -15,6 +15,8 @@ public class CrackmesDbContext(DbContextOptions<CrackmesDbContext> options) : Db
     public DbSet<Reaction> Reactions => Set<Reaction>();
     public DbSet<Solve> Solves => Set<Solve>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<Badge> Badges => Set<Badge>();
+    public DbSet<UserBadge> UserBadges => Set<UserBadge>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<CrackmeTag> CrackmeTags => Set<CrackmeTag>();
     public DbSet<ModerationReview> ModerationReviews => Set<ModerationReview>();

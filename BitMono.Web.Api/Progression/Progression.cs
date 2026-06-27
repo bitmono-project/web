@@ -1,3 +1,4 @@
+using BitMono.Web.Api.Badges;
 using BitMono.Web.Api.Notifications;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
@@ -120,6 +121,15 @@ public static class SolveRecorder
                 firstBlood ? NotificationType.FirstBlood : NotificationType.SolvedYourCrackme,
                 firstBlood ? $"First blood on '{c.Title}'!" : $"Someone solved '{c.Title}'",
                 null, $"/challenge/{c.Slug}", userId, c.Id, ct);
+        }
+        catch { }
+
+        try
+        {
+            if (firstBlood)
+                await BadgeService.TryAwardAsync(db, userId, BadgeService.FirstBlood, ct);
+            if (c.IsBitMonoObfuscated)
+                await BadgeService.TryAwardAsync(db, userId, BadgeService.Bitmonoed, ct);
         }
         catch { }
         return solve;

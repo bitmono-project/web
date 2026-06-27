@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using BitMono.Web.Api.Auth;
+using BitMono.Web.Api.Badges;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Notifications;
 using BitMono.Web.Api.Progression;
@@ -202,7 +203,17 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
         // An approved writeup credits its author as a solver — SolvedCount is now COUNT(Solve),
         // bumped here via the recorder (replacing the old direct SolvedCount++).
         if (newlyApproved && s.AuthorUserId is { } author)
+        {
             await SolveRecorder.TryRecordAsync(db, s.Crackme, author, SolveSource.Writeup, ct);
+            try
+            {
+                var writeups = await db.Solutions.AsNoTracking()
+                    .CountAsync(x => x.AuthorUserId == author && x.Status == SolutionStatus.Approved, ct);
+                if (writeups >= 3)
+                    await BadgeService.TryAwardAsync(db, author, BadgeService.Professor, ct);
+            }
+            catch { }
+        }
         return NoContent();
     }
 
@@ -370,6 +381,18 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
                     $"'{c.Title}' wasn't approved", message, "/submissions", actor, c.Id, ct);
         }
         catch { /* a notify must never break the moderation action */ }
+
+        if (approve && c.UploaderUserId is { } author)
+        {
+            try
+            {
+                var authored = await db.Crackmes.AsNoTracking()
+                    .CountAsync(x => x.UploaderUserId == author && x.Status == CrackmeStatus.Approved && !x.IsTakenDown, ct);
+                if (authored >= 3)
+                    await BadgeService.TryAwardAsync(db, author, BadgeService.Scenarist, ct);
+            }
+            catch { }
+        }
         return NoContent();
     }
 }

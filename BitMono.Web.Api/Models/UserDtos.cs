@@ -13,7 +13,10 @@ public sealed record UserProfile(
     int? Position,
     int Solves,
     int Authored,
-    int Writeups);
+    int Writeups,
+    IReadOnlyList<ProfileBadge> Badges);
+
+public sealed record ProfileBadge(string Code, string Name, string Description, BadgeRarity Rarity, DateTime AwardedAt);
 
 public sealed record ProfileCrackme(
     string Slug,

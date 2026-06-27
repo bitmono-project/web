@@ -220,6 +220,14 @@ export async function getMyRank(): Promise<MyRank | null> {
 
 // --- public profiles ---
 
+export interface ProfileBadge {
+  code: string
+  name: string
+  description: string
+  rarity: string
+  awardedAt: string
+}
+
 export interface UserProfile {
   handle: string
   displayName: string
@@ -232,6 +240,7 @@ export interface UserProfile {
   solves: number
   authored: number
   writeups: number
+  badges: ProfileBadge[]
 }
 
 export interface ProfileCrackme {

@@ -46,7 +46,8 @@ public class Worker(
                 await db.Database.MigrateAsync(ct);
             }
 
-            // Dev-only sample data (no-op in prod and when crackmes already exist).
+            // Badge catalogue (all envs — reference data), then dev-only sample crackmes.
+            await BadgeCatalog.EnsureAsync(db, ct);
             await CrackmeSeed.SeedAsync(db, environment, ct);
 
             logger.LogInformation("appdb is up to date.");

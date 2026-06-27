@@ -30,10 +30,17 @@ public sealed class UsersController(IServiceScopeFactory scopeFactory) : Control
         var position = u.Points > 0
             ? await db.Users.AsNoTracking().CountAsync(x => x.Points > u.Points, ct) + 1
             : (int?)null;
+        var badges = await db.UserBadges.AsNoTracking()
+            .Where(ub => ub.UserId == u.Id)
+            .Join(db.Badges.AsNoTracking(), ub => ub.BadgeCode, b => b.Code,
+                (ub, b) => new { b.Code, b.Name, b.Description, b.Rarity, b.SortOrder, ub.AwardedAt })
+            .OrderBy(x => x.SortOrder)
+            .Select(x => new ProfileBadge(x.Code, x.Name, x.Description, x.Rarity, x.AwardedAt))
+            .ToListAsync(ct);
 
         return new UserProfile(
             u.Handle!, u.DisplayName, u.AvatarUrl, u.Role.ToString(), u.CreatedAt,
-            u.Points, Ranks.For(u.Points).Name, position, solves, authored, writeups);
+            u.Points, Ranks.For(u.Points).Name, position, solves, authored, writeups, badges);
     }
 
     [HttpGet("{handle}/crackmes")]

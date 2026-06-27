@@ -62,6 +62,16 @@ export default function Profile() {
 
       {ranksOpen && <RanksDialog points={profile.points} onClose={() => setRanksOpen(false)} />}
 
+      {profile.badges.length > 0 && (
+        <div className="mt-6 flex flex-wrap gap-2">
+          {profile.badges.map((b) => (
+            <span key={b.code} title={b.description} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[12px] ${badgeClass(b.rarity)}`}>
+              <span aria-hidden>●</span> {b.name}
+            </span>
+          ))}
+        </div>
+      )}
+
       <h2 className="mb-3 mt-12 font-display text-2xl font-bold text-ink">Authored crackmes</h2>
       {crackmes.length === 0 ? (
         <p className="font-mono text-[13px] text-faint">None yet.</p>
@@ -78,6 +88,15 @@ export default function Profile() {
       )}
     </main>
   )
+}
+
+function badgeClass(rarity: string): string {
+  switch (rarity) {
+    case 'rare': return 'border-acid/50 text-acid'
+    case 'epic': return 'border-violet-400/50 text-violet-300'
+    case 'legendary': return 'border-amber-400/50 text-amber-300'
+    default: return 'border-line text-muted'
+  }
 }
 
 // Defensive truncate + title so an unexpectedly long value never blows out the fixed-width card.
