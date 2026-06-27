@@ -8,6 +8,7 @@ using BitMono.Web.Api.Storage;
 using BitMono.Web.Data;
 using Hangfire;
 using Hangfire.PostgreSql;
+using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -17,6 +18,15 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.AddSentry();
+
+// Behind Cloudflare Tunnel TLS terminates at the edge and the api is reached over http on a private
+// Docker network. Honor X-Forwarded-Proto/Host so OAuth builds https redirect_uris (else mismatch).
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    options.KnownIPNetworks.Clear();   // .NET 10 renamed KnownNetworks → KnownIPNetworks
+    options.KnownProxies.Clear();
+});
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
@@ -74,6 +84,8 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();   // first — sets Request.Scheme=https from X-Forwarded-Proto for correct OAuth redirects
 
 app.UseExceptionHandler();
 

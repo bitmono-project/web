@@ -80,7 +80,17 @@ public static class AuthSetup
         var name = ctx.Identity?.FindFirst(ClaimTypes.Name)?.Value ?? $"{provider}-user";
         var email = ctx.Identity?.FindFirst(ClaimTypes.Email)?.Value;
 
-        var user = await users.FindOrCreateAsync(provider, providerUserId, name, null, email);
+        // Bootstrap admins: a GitHub login listed in Admins:GitHub is elevated to Admin on sign-in.
+        UserRole? role = null;
+        if (provider == "github")
+        {
+            var admins = ctx.HttpContext.RequestServices.GetRequiredService<IConfiguration>()
+                .GetSection("Admins:GitHub").Get<string[]>() ?? [];
+            if (admins.Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase)))
+                role = UserRole.Admin;
+        }
+
+        var user = await users.FindOrCreateAsync(provider, providerUserId, name, null, email, role);
         ctx.Identity!.AddClaim(new Claim("uid", user.Id.ToString()));
         ctx.Identity.AddClaim(new Claim(ClaimTypes.Role, user.Role.ToString()));
     };
