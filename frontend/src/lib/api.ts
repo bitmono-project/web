@@ -32,17 +32,35 @@ export async function getEngineVersion(): Promise<string> {
   }
 }
 
-export async function startObfuscation(file: File, protections: string[], agree = true): Promise<string> {
+// XHR (not fetch) so we can report real upload progress — fetch has no upload-progress event.
+export async function startObfuscation(
+  file: File,
+  protections: string[],
+  agree = true,
+  onProgress?: (pct: number) => void,
+): Promise<string> {
   const form = new FormData()
   form.append('file', file)
   for (const p of protections) form.append('protections', p)
   form.append('agree', String(agree))
-  const res = await fetch('/obfuscate', { method: 'POST', body: form })
-  if (res.status !== 202) {
-    throw new Error((await res.text().catch(() => '')) || `Upload failed (${res.status})`)
-  }
-  const body = (await res.json()) as AcceptedResponse
-  return body.id
+
+  return await new Promise<string>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/obfuscate')
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress((e.loaded / e.total) * 100)
+    }
+    xhr.onload = () => {
+      if (xhr.status === 202) {
+        try { resolve((JSON.parse(xhr.responseText) as AcceptedResponse).id) }
+        catch { reject(new Error('Bad response from server.')) }
+      } else {
+        reject(new Error(xhr.responseText || `Upload failed (${xhr.status})`))
+      }
+    }
+    xhr.onerror = () => reject(new Error('Network error during upload.'))
+    xhr.send(form)
+  })
 }
 
 export async function getStatus(id: string): Promise<JobStatus> {

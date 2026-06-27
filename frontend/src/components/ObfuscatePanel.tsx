@@ -31,6 +31,7 @@ export function ObfuscatePanel() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [level, setLevel] = useState<string>(DEFAULT_LEVEL)
   const [agreed, setAgreed] = useState(false)
+  const [progress, setProgress] = useState<{ stage: 'uploading' | 'obfuscating'; pct: number }>({ stage: 'uploading', pct: 0 })
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -72,9 +73,11 @@ export function ObfuscatePanel() {
   const run = useCallback(async () => {
     if (!file) return
     setPhase('working')
+    setProgress({ stage: 'uploading', pct: 0 })
     setError('')
     try {
-      const id = await startObfuscation(file, [...selected], agreed)
+      const id = await startObfuscation(file, [...selected], agreed, (pct) => setProgress({ stage: 'uploading', pct }))
+      setProgress({ stage: 'obfuscating', pct: 100 })
       const status = await waitForResult(id)
       if (status === 'done') {
         setResult({ id, name: file.name })
@@ -149,11 +152,7 @@ export function ObfuscatePanel() {
               </>
             )}
 
-            {phase === 'working' && (
-              <div className="font-mono text-sm text-acid">
-                scrambling<span className="caret">_</span>
-              </div>
-            )}
+            {phase === 'working' && <WorkingView stage={progress.stage} pct={progress.pct} />}
 
             {phase === 'done' && result && (
               <div className="flex flex-col items-center gap-3">
@@ -238,6 +237,45 @@ function ProtectionRow({ p, checked, onToggle }: { p: ProtectionInfo; checked: b
       </span>
     </button>
   )
+}
+
+// Honest progress: a real bar while bytes upload (the only thing we can measure), then an
+// indeterminate "obfuscating" state with a live elapsed timer — no fabricated percentage.
+function WorkingView({ stage, pct }: { stage: 'uploading' | 'obfuscating'; pct: number }) {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (stage !== 'obfuscating') return
+    const t0 = Date.now()
+    const id = setInterval(() => setElapsed((Date.now() - t0) / 1000), 250)
+    return () => clearInterval(id)
+  }, [stage])
+
+  if (stage === 'uploading') {
+    return (
+      <div className="w-full max-w-xs">
+        <div className="mb-2 flex items-center justify-between font-mono text-[12px]">
+          <span className="text-muted">uploading</span>
+          <span className="tabular-nums text-acid">{Math.round(pct)}%</span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-line">
+          <div className="h-full rounded-full bg-acid transition-[width] duration-150 ease-out" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="font-mono text-sm text-acid">obfuscating<span className="caret">_</span></div>
+      <div className="font-mono text-[11px] tabular-nums text-faint">{formatElapsed(elapsed)} · static analysis, no execution</div>
+    </div>
+  )
+}
+
+const formatElapsed = (s: number): string => {
+  const m = Math.floor(s / 60)
+  const sec = Math.floor(s % 60)
+  return m > 0 ? `${m}m ${String(sec).padStart(2, '0')}s` : `${sec}s`
 }
 
 function Corners() {
