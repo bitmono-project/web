@@ -212,3 +212,60 @@ export async function rateCrackme(slug: string, difficulty: number, quality: num
   if (!res.ok) return null
   return (await res.json()) as RatingResult
 }
+
+// --- writeups (moderated; each is a full solution / spoiler) ---
+
+export interface WriteupItem {
+  id: string
+  author: string
+  title: string | null
+  bodyMarkdown: string
+  hasAttachment: boolean
+  upvoteCount: number
+  createdAt: string
+}
+
+export interface PendingWriteup {
+  id: string
+  crackmeSlug: string
+  crackmeTitle: string
+  author: string
+  title: string | null
+  bodyMarkdown: string
+  hasAttachment: boolean
+  createdAt: string
+}
+
+export async function getWriteups(slug: string): Promise<WriteupItem[]> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups`)
+  if (!res.ok) return []
+  return (await res.json()) as WriteupItem[]
+}
+
+export async function submitWriteup(slug: string, title: string, body: string, attachment: File | null): Promise<boolean> {
+  const fd = new FormData()
+  if (title.trim()) fd.set('Title', title.trim())
+  fd.set('BodyMarkdown', body)
+  if (attachment) fd.set('Attachment', attachment)
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups`, { method: 'POST', body: fd })
+  return res.status === 202
+}
+
+export const writeupAttachmentUrl = (slug: string, id: string): string =>
+  `/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}/attachment`
+
+export async function getWriteupQueue(): Promise<PendingWriteup[]> {
+  const res = await fetch('/api/moderation/writeups')
+  if (!res.ok) throw new Error(`Failed to load writeup queue (${res.status})`)
+  return (await res.json()) as PendingWriteup[]
+}
+
+export async function approveWriteup(id: string): Promise<boolean> {
+  return (await fetch(`/api/moderation/writeups/${id}/approve`, { method: 'POST' })).ok
+}
+
+export async function rejectWriteup(id: string): Promise<boolean> {
+  return (await fetch(`/api/moderation/writeups/${id}/reject`, { method: 'POST' })).ok
+}
+
+export const modWriteupAttachmentUrl = (id: string): string => `/api/moderation/writeups/${id}/attachment`

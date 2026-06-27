@@ -2,20 +2,31 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isModerator, useAuth } from '../lib/auth'
 import {
-  type PendingItem, getQueue, approveCrackme, rejectCrackme, moderationFileUrl,
+  type PendingItem, type PendingWriteup,
+  getQueue, approveCrackme, rejectCrackme, moderationFileUrl,
+  getWriteupQueue, approveWriteup, rejectWriteup, modWriteupAttachmentUrl,
   platformLabel, languageLabel, difficultyLabel, formatSize, formatDate,
 } from '../lib/crackmes'
 
 export default function Moderation() {
   const { me, loading } = useAuth()
   const [items, setItems] = useState<PendingItem[]>([])
+  const [writeups, setWriteups] = useState<PendingWriteup[]>([])
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
   const [busy, setBusy] = useState<string | null>(null)
 
   useEffect(() => {
     if (loading || !isModerator(me)) return
     getQueue().then((q) => { setItems(q); setState('ok') }).catch(() => setState('error'))
+    getWriteupQueue().then(setWriteups).catch(() => {})
   }, [loading, me])
+
+  const actWriteup = async (id: string, approve: boolean) => {
+    setBusy(id)
+    const ok = approve ? await approveWriteup(id) : await rejectWriteup(id)
+    setBusy(null)
+    if (ok) setWriteups((xs) => xs.filter((x) => x.id !== id))
+  }
 
   if (loading) return null
   if (!isModerator(me)) return (
@@ -80,6 +91,36 @@ export default function Moderation() {
           </div>
         ))}
       </div>
+
+      {writeups.length > 0 && (
+        <>
+          <h2 className="mt-12 font-display text-2xl font-bold text-ink">
+            Writeup queue <span className="font-mono text-sm text-faint">({writeups.length})</span>
+          </h2>
+          <div className="mt-4 space-y-4">
+            {writeups.map((w) => (
+              <div key={w.id} className="rounded-xl border border-line bg-surface/30 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-display text-lg font-bold text-ink">{w.title ?? 'Writeup'}</h3>
+                    <p className="mt-1 font-mono text-[12px] text-muted">
+                      for <Link to={`/challenge/${w.crackmeSlug}`} className="text-acid hover:underline">{w.crackmeTitle}</Link> · by {w.author} · {formatDate(w.createdAt)}
+                    </p>
+                  </div>
+                  {w.hasAttachment && (
+                    <a href={modWriteupAttachmentUrl(w.id)} className="rounded-full border border-line px-3 py-1.5 font-mono text-[12px] text-ink transition-colors hover:border-acid hover:text-acid">attachment ↓</a>
+                  )}
+                </div>
+                <p className="mt-3 max-h-60 overflow-y-auto whitespace-pre-wrap rounded border border-line bg-void/40 p-3 font-mono text-[12px] leading-relaxed text-ink/80">{w.bodyMarkdown}</p>
+                <div className="mt-4 flex gap-2">
+                  <button onClick={() => actWriteup(w.id, true)} disabled={busy === w.id} className="btn-acid disabled:opacity-50">approve</button>
+                  <button onClick={() => actWriteup(w.id, false)} disabled={busy === w.id} className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-red-400 hover:text-red-400 disabled:opacity-50">reject</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </main>
   )
 }

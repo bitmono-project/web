@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Data;
@@ -209,6 +210,107 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         return Ok(new RatingResult(
             Avg(crackme.DifficultySum, crackme.DifficultyCount), crackme.DifficultyCount,
             Avg(crackme.QualitySum, crackme.QualityCount), crackme.QualityCount));
+    }
+
+    [HttpGet("{slug}/writeups")]
+    public async Task<ActionResult<IReadOnlyList<WriteupItem>>> Writeups(string slug, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var id = await PublicIdAsync(db, slug, ct);
+        if (id is null)
+            return NotFound();
+
+        var writeups = await db.Solutions.AsNoTracking()
+            .Where(s => s.CrackmeId == id && s.Status == SolutionStatus.Approved)
+            .OrderByDescending(s => s.UpvoteCount).ThenBy(s => s.CreatedAt)
+            .Select(s => new WriteupItem(s.Id, s.AnonymousHandle ?? "anonymous", s.Title, s.BodyMarkdown, s.HasAttachment, s.UpvoteCount, s.CreatedAt))
+            .ToListAsync(ct);
+        return Ok(writeups);
+    }
+
+    [HttpPost("{slug}/writeups")]
+    [Authorize]
+    [EnableRateLimiting("upload")]
+    public async Task<ActionResult<WriteupResponse>> AddWriteup(string slug, [FromForm] WriteupForm form, CancellationToken ct)
+    {
+        var body = form.BodyMarkdown?.Trim();
+        if (string.IsNullOrEmpty(body))
+            return BadRequest("Writeup body is required.");
+        if (body.Length > 40000)
+            body = body[..40000];
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var crackme = await db.Crackmes.AsNoTracking().Where(Public).FirstOrDefaultAsync(c => c.Slug == slug, ct);
+        if (crackme is null)
+            return NotFound();
+
+        var id = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var solution = new Solution
+        {
+            Id = id,
+            CrackmeId = crackme.Id,
+            AuthorUserId = Guid.Parse(User.FindFirstValue("uid")!),
+            AnonymousHandle = User.Identity?.Name ?? "anonymous",
+            Title = string.IsNullOrWhiteSpace(form.Title) ? null : form.Title.Trim(),
+            BodyMarkdown = body,
+            Status = SolutionStatus.Pending,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        var file = form.Attachment;
+        if (file is { Length: > 0 })
+        {
+            var max = cfg.GetValue<long?>("Crackmes:MaxUploadBytes") ?? 10 * 1024 * 1024;
+            if (file.Length > max)
+                return BadRequest($"Attachment must be under {max / (1024 * 1024)} MB.");
+            await using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var bytes = ms.ToArray();
+            var key = $"writeups/{id:N}/{SanitizeFileName(file.FileName)}";
+            await storage.SaveAsync(key, new MemoryStream(bytes, writable: false), ct);
+            solution.HasAttachment = true;
+            solution.StorageKey = key;
+            solution.Sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+            solution.SizeBytes = file.Length;
+        }
+
+        db.Solutions.Add(solution);
+        await db.SaveChangesAsync(ct);
+        return Accepted(new WriteupResponse(id, "pending"));
+    }
+
+    [HttpGet("{slug}/writeups/{id:guid}/attachment")]
+    public async Task<IActionResult> WriteupAttachment(string slug, Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
+        if (s is null || !s.HasAttachment || s.StorageKey is null)
+            return NotFound();
+
+        var stream = await storage.OpenReadAsync(s.StorageKey, ct);
+        if (stream is null)
+            return NotFound("Attachment is no longer available.");
+        await using (stream)
+        {
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, ct);
+            var zip = PasswordZip.Create(Path.GetFileName(s.StorageKey), ms.ToArray(), cfg["Crackmes:ZipPassword"] ?? "bitmono.dev");
+            return File(zip, "application/zip", $"{slug}-writeup.zip");
+        }
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        var clean = Path.GetFileName(name);
+        foreach (var c in Path.GetInvalidFileNameChars())
+            clean = clean.Replace(c, '_');
+        return string.IsNullOrWhiteSpace(clean) ? "attachment.bin" : clean;
     }
 
     private static async Task<Guid?> PublicIdAsync(CrackmesDbContext db, string slug, CancellationToken ct)

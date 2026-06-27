@@ -2,8 +2,9 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  type CrackmeDetail as Detail, type CommentItem, type MyRating,
+  type CrackmeDetail as Detail, type CommentItem, type MyRating, type WriteupItem,
   getCrackme, getComments, postComment, getMyRating, rateCrackme,
+  getWriteups, submitWriteup, writeupAttachmentUrl,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
 import { type Me, useAuth } from '../lib/auth'
@@ -83,6 +84,7 @@ export default function CrackmeDetail() {
       </p>
 
       <RatingsPanel slug={c.slug} me={me} initial={c} />
+      <WriteupsPanel slug={c.slug} me={me} />
       <CommentsPanel slug={c.slug} me={me} />
     </main>
   )
@@ -210,8 +212,85 @@ function CommentsPanel({ slug, me }: { slug: string; me: Me | null }) {
           <Link to={`/login?returnUrl=/challenge/${slug}`} className="text-acid hover:underline">Sign in</Link> to comment.
         </p>
       )}
+    </div>
+  )
+}
 
-      <p className="mt-8 font-mono text-xs text-faint">Writeups — coming soon.</p>
+function WriteupsPanel({ slug, me }: { slug: string; me: Me | null }) {
+  const [writeups, setWriteups] = useState<WriteupItem[]>([])
+  const [revealed, setRevealed] = useState<Set<string>>(new Set())
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [phase, setPhase] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
+
+  useEffect(() => { getWriteups(slug).then(setWriteups) }, [slug])
+
+  const send = async () => {
+    if (!body.trim()) return
+    setPhase('sending')
+    const ok = await submitWriteup(slug, title, body.trim(), file)
+    setPhase(ok ? 'done' : 'error')
+    if (ok) { setTitle(''); setBody(''); setFile(null); setOpen(false) }
+  }
+
+  return (
+    <div className="mt-10">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-faint">Writeups ({writeups.length})</span>
+        {me && <button onClick={() => setOpen((o) => !o)} className="font-mono text-[12px] text-acid hover:underline">{open ? 'cancel' : '+ submit a writeup'}</button>}
+      </div>
+
+      {phase === 'done' && <p className="mb-3 font-mono text-[12px] text-acid">Writeup submitted — it’ll appear here once a moderator approves it.</p>}
+
+      {open && me && (
+        <div className="mb-4 rounded-lg border border-line bg-surface/30 p-4">
+          <p className="mb-2 font-mono text-[11px] text-faint">Explain how you solved it — Markdown welcome. Don’t just paste a key; show the process. Optional keygen/patched binary as attachment.</p>
+          <input
+            className="mb-2 w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
+            placeholder="title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={150}
+          />
+          <textarea
+            className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
+            rows={8} maxLength={40000} placeholder="# How I cracked it&#10;..." value={body} onChange={(e) => setBody(e.target.value)}
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="font-mono text-[12px] text-muted file:mr-2 file:rounded file:border-0 file:bg-line file:px-2 file:py-1 file:text-ink" />
+            <button onClick={send} disabled={phase === 'sending' || !body.trim()} className="btn-acid ml-auto disabled:opacity-50">{phase === 'sending' ? '…' : 'submit for review'}</button>
+          </div>
+          {phase === 'error' && <p className="mt-2 font-mono text-xs text-red-400">Submission failed — try again.</p>}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {writeups.length === 0 && <p className="font-mono text-[13px] text-faint">No writeups yet — be the first.</p>}
+        {writeups.map((w) => (
+          <div key={w.id} className="rounded-lg border border-line bg-surface/30 p-4">
+            <div className="flex items-center justify-between font-mono text-[11px] text-faint">
+              <span>{w.title ?? 'Writeup'} · {w.author} · {formatDate(w.createdAt)}</span>
+            </div>
+            {revealed.has(w.id) ? (
+              <>
+                <p className="mt-2 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{w.bodyMarkdown}</p>
+                {w.hasAttachment && (
+                  <a href={writeupAttachmentUrl(slug, w.id)} className="mt-3 inline-block font-mono text-[12px] text-acid hover:underline">
+                    download attachment ↓ (zip password: bitmono.dev)
+                  </a>
+                )}
+              </>
+            ) : (
+              <button onClick={() => setRevealed((s) => new Set(s).add(w.id))} className="mt-1 font-mono text-[13px] text-acid hover:underline">
+                [full solution — click to reveal spoiler]
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {!me && <p className="mt-3 font-mono text-[13px] text-muted">
+        <Link to={`/login?returnUrl=/challenge/${slug}`} className="text-acid hover:underline">Sign in</Link> to submit a writeup.
+      </p>}
     </div>
   )
 }

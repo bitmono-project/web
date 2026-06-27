@@ -64,6 +64,72 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
     public Task<IActionResult> Reject(Guid id, [FromBody] ModerationActionRequest? req, CancellationToken ct) =>
         ActAsync(id, approve: false, req?.Message, ct);
 
+    [HttpGet("writeups")]
+    public async Task<IReadOnlyList<PendingWriteup>> WriteupQueue(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        return await db.Solutions.AsNoTracking()
+            .Where(s => s.Status == SolutionStatus.Pending)
+            .OrderBy(s => s.CreatedAt)
+            .Select(s => new PendingWriteup(
+                s.Id, s.Crackme.Slug, s.Crackme.Title, s.AnonymousHandle ?? "anonymous",
+                s.Title, s.BodyMarkdown, s.HasAttachment, s.CreatedAt))
+            .ToListAsync(ct);
+    }
+
+    [HttpGet("writeups/{id:guid}/attachment")]
+    public async Task<IActionResult> WriteupAttachment(Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (s is null || !s.HasAttachment || s.StorageKey is null)
+            return NotFound();
+        var stream = await storage.OpenReadAsync(s.StorageKey, ct);
+        if (stream is null)
+            return NotFound("Attachment missing from storage.");
+        await using (stream)
+        {
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, ct);
+            var zip = PasswordZip.Create(Path.GetFileName(s.StorageKey), ms.ToArray(), cfg["Crackmes:ZipPassword"] ?? "bitmono.dev");
+            return File(zip, "application/zip", "writeup.zip");
+        }
+    }
+
+    [HttpPost("writeups/{id:guid}/approve")]
+    public async Task<IActionResult> ApproveWriteup(Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.Include(x => x.Crackme).FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (s is null)
+            return NotFound();
+        if (s.Status != SolutionStatus.Approved)
+        {
+            s.Status = SolutionStatus.Approved;
+            s.UpdatedAt = DateTime.UtcNow;
+            s.Crackme.SolvedCount++;
+        }
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    [HttpPost("writeups/{id:guid}/reject")]
+    public async Task<IActionResult> RejectWriteup(Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (s is null)
+            return NotFound();
+        s.Status = SolutionStatus.Rejected;
+        s.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
     private async Task<IActionResult> ActAsync(Guid id, bool approve, string? message, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
