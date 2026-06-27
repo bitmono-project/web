@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isModerator, useAuth } from '../lib/auth'
-import { PromptDialog, REJECT_PRESETS } from '../components/PromptDialog'
+import { PromptDialog, ConfirmDialog, REJECT_PRESETS } from '../components/PromptDialog'
 import {
   type PendingItem, type PendingWriteup, type PendingReport,
   getQueue, approveCrackme, rejectCrackme, moderationFileUrl,
@@ -18,6 +18,7 @@ export default function Moderation() {
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
   const [busy, setBusy] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<PendingItem | null>(null)
+  const [approving, setApproving] = useState<PendingItem | null>(null)
 
   useEffect(() => {
     if (loading || !isModerator(me)) return
@@ -48,6 +49,7 @@ export default function Moderation() {
   )
 
   const approve = async (item: PendingItem) => {
+    setApproving(null)
     setBusy(item.id)
     const ok = await approveCrackme(item.id)
     setBusy(null)
@@ -99,7 +101,7 @@ export default function Moderation() {
             <p className="mt-3 break-all font-mono text-[11px] text-faint">sha256 {c.sha256}</p>
 
             <div className="mt-4 flex gap-2">
-              <button onClick={() => approve(c)} disabled={busy === c.id} className="btn-acid disabled:opacity-50">approve</button>
+              <button onClick={() => setApproving(c)} disabled={busy === c.id} className="btn-acid disabled:opacity-50">approve</button>
               <button onClick={() => setRejecting(c)} disabled={busy === c.id} className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-red-400 hover:text-red-400 disabled:opacity-50">reject</button>
             </div>
           </div>
@@ -157,6 +159,15 @@ export default function Moderation() {
             ))}
           </div>
         </>
+      )}
+      {approving && (
+        <ConfirmDialog
+          title="Approve submission"
+          message={`“${approving.title}” will be published to the gallery and the author notified. You can still take it down later.`}
+          confirmText="approve"
+          onConfirm={() => approve(approving)}
+          onCancel={() => setApproving(null)}
+        />
       )}
       {rejecting && (
         <PromptDialog

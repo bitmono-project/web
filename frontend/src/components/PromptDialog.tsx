@@ -19,6 +19,36 @@ export const TAKEDOWN_PRESETS = [
   'Broken / no longer works',
 ]
 
+// A yes/no confirmation in the same style — a speed bump for one-click actions (e.g. approve) so a
+// misclick doesn't go through. Click-outside or Esc cancels.
+export function ConfirmDialog({ title, message, confirmText, danger, onConfirm, onCancel }: {
+  title: string
+  message?: string
+  confirmText: string
+  danger?: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div onClick={onCancel} className="fixed inset-0 z-[90] flex items-center justify-center bg-void/80 p-6 backdrop-blur-sm">
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') onCancel() }} className="w-full max-w-md rounded-2xl border border-line bg-surface p-6">
+        <h2 className="font-display text-xl font-bold text-ink">{title}</h2>
+        {message && <p className="mt-2 font-mono text-[13px] leading-snug text-muted">{message}</p>}
+        <div className="mt-5 flex items-center justify-end gap-4">
+          <button onClick={onCancel} className="font-mono text-[13px] text-faint transition-colors hover:text-ink">cancel</button>
+          <button
+            autoFocus
+            onClick={onConfirm}
+            className={`rounded-full px-4 py-2 font-mono text-sm font-bold transition-colors ${danger ? 'border border-red-400/50 text-red-400 hover:bg-red-400/10' : 'bg-acid text-void hover:bg-acid-dim'}`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // An in-app replacement for window.prompt — same dark/acid style as the rest of the site.
 // Click-outside or Esc cancels; the confirm button stays disabled until there's text.
 export function PromptDialog({ title, label, placeholder, confirmText, danger, presets, onConfirm, onCancel }: {
