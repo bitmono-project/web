@@ -12,6 +12,11 @@ permissions:
 
 # Required repo/org secrets:
 #   SSH_PRIVATE_KEY, SERVER_HOST, SERVER_USER, SSH_PORT, DATABASE_PASSWORD, REDIS_PASSWORD, SENTRY_DSN
+# Optional (crackmes gallery — each enables its feature; unset = disabled):
+#   DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET   (Discord OAuth login)
+#   GH_OAUTH_CLIENT_ID, GH_OAUTH_CLIENT_SECRET (GitHub OAuth login; GH_ prefix — GITHUB_* is reserved)
+#   TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY   (Cloudflare Turnstile captcha on upload)
+#   CRACKME_ZIP_PASSWORD                        (download zip password; defaults to bitmono.dev)
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -57,5 +62,13 @@ jobs:
           # Secret parameters (AppHost AddParameter)
           Parameters__DatabasePassword: ${{ secrets.DATABASE_PASSWORD }}
           Parameters__RedisPassword: ${{ secrets.REDIS_PASSWORD }}
+          # Crackmes gallery — OAuth, Turnstile captcha, download-zip password (all optional)
+          Parameters__DiscordClientId: ${{ secrets.DISCORD_CLIENT_ID }}
+          Parameters__DiscordClientSecret: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          Parameters__GitHubClientId: ${{ secrets.GH_OAUTH_CLIENT_ID }}
+          Parameters__GitHubClientSecret: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+          Parameters__TurnstileSiteKey: ${{ secrets.TURNSTILE_SITE_KEY }}
+          Parameters__TurnstileSecretKey: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          Parameters__ZipPassword: ${{ secrets.CRACKME_ZIP_PASSWORD }}
           # Sentry/Bugsink DSN
           Sentry__Dsn: ${{ secrets.SENTRY_DSN }}

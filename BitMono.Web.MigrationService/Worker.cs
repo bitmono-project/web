@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using BitMono.Web.Data;
+using BitMono.Web.MigrationService.Seeding;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
@@ -44,6 +45,9 @@ public class Worker(
             {
                 await db.Database.MigrateAsync(ct);
             }
+
+            // Dev-only sample data (no-op in prod and when crackmes already exist).
+            await CrackmeSeed.SeedAsync(db, environment, ct);
 
             logger.LogInformation("appdb is up to date.");
         }

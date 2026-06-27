@@ -7,16 +7,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AspNet.Security.OAuth.Discord" Version="10.0.0" />
+    <PackageReference Include="AspNet.Security.OAuth.GitHub" Version="10.0.0" />
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
     <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.6" />
     <PackageReference Include="Aspire.Npgsql" Version="13.2.4" />
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.4" />
     <!-- pin: override Hangfire's vulnerable transitive Newtonsoft.Json 11.0.1 (GHSA-5crp-9r3c-p9vr) -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="SharpZipLib" Version="1.4.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\BitMono.Web.ServiceDefaults\BitMono.Web.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\BitMono.Web.Data\BitMono.Web.Data.csproj" />
   </ItemGroup>
 
 </Project>

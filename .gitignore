@@ -413,3 +413,7 @@ FodyWeavers.xsd
 # OS
 .DS_Store
 Thumbs.db
+
+# bitmono-web runtime / generated
+**/App_Data/
+**/aspire-output/

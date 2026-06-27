@@ -69,6 +69,14 @@ if (runMode)
 {
     api.WithHttpEndpoint(name: "http");
 
+    // Propagate the AppHost's own environment to the children (api has ExcludeLaunchProfile, so it
+    // gets no launchSettings env). The api (web) reads ASPNETCORE_ENVIRONMENT; the migrations worker
+    // is a generic Host reading DOTNET_ENVIRONMENT — set both so dev-login, OpenAPI, the migrations
+    // rebuild path, and sample seeding follow the AppHost env.
+    var childEnvironment = builder.Environment.EnvironmentName;
+    api.WithEnvironment("ASPNETCORE_ENVIRONMENT", childEnvironment);
+    migrations.WithEnvironment("DOTNET_ENVIRONMENT", childEnvironment);
+
     web = builder.AddViteApp("web", "../frontend")
         .WithReference(api)
         .WithEnvironment("VITE_API_URL", api.GetEndpoint("http"))
@@ -78,9 +86,38 @@ if (runMode)
 }
 else
 {
+    var blobsHostPath = $"{config["Deployment:RemoteDeployPath"] ?? "/opt/bitmono/web"}/blobs";
     api.WithHttpEndpoint(port: ApiDeployPort, targetPort: ApiDeployPort, name: "http", env: "HTTP_PORTS")
         .WithEnvironment("DOTNET_USE_POLLING_FILE_WATCHER", "1")
-        .PublishAsDockerComposeService((_, service) => service.Restart = "always");
+        .WithEnvironment("Storage__Disk__Path", "/data/blobs")
+        .PublishAsDockerComposeService((_, service) =>
+        {
+            service.Restart = "always";
+            // Persist crackme files across redeploys — bind a host dir on the single server.
+            service.Volumes.Add(new Aspire.Hosting.Docker.Resources.ServiceNodes.Volume
+            {
+                Name = "bitmono-blobs",
+                Type = "bind",
+                Source = blobsHostPath,
+                Target = "/data/blobs",
+            });
+        });
+
+    // Secrets/config from the deploy pipeline (Deploy.yml -> Parameters__*). Each is optional —
+    // wired only when provided, so OAuth/Turnstile/zip-password can be enabled independently.
+    void WireParam(string envKey, string paramName, bool secret)
+    {
+        if (!string.IsNullOrEmpty(config[$"Parameters:{paramName}"]))
+            api.WithEnvironment(envKey, builder.AddParameter(paramName, secret: secret));
+    }
+
+    WireParam("Auth__Discord__ClientId", "DiscordClientId", secret: false);
+    WireParam("Auth__Discord__ClientSecret", "DiscordClientSecret", secret: true);
+    WireParam("Auth__GitHub__ClientId", "GitHubClientId", secret: false);
+    WireParam("Auth__GitHub__ClientSecret", "GitHubClientSecret", secret: true);
+    WireParam("Crackmes__Turnstile__SiteKey", "TurnstileSiteKey", secret: false);
+    WireParam("Crackmes__Turnstile__SecretKey", "TurnstileSecretKey", secret: true);
+    WireParam("Crackmes__ZipPassword", "ZipPassword", secret: true);
 
     deployWeb = builder.AddDockerfile("web", "../frontend")
         .WithHttpEndpoint(port: WebDeployPort, targetPort: WebDeployPort, env: "PORT")

@@ -1,8 +1,11 @@
 using BitMono.Web.Api.Hangfire;
 using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Jobs;
+using BitMono.Web.Api.Auth;
 using BitMono.Web.Api.Obfuscation;
+using BitMono.Web.Api.Security;
 using BitMono.Web.Api.Storage;
+using BitMono.Web.Data;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Npgsql;
@@ -21,6 +24,15 @@ builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
 builder.AddNpgsqlDataSource(connectionName: "db");
+
+// Crackmes gallery schema lives on the separate appdb (Hangfire keeps `db`).
+builder.AddNpgsqlDbContext<CrackmesDbContext>("appdb");
+
+builder.AddBitMonoAuth();
+builder.AddBlobStorage();
+
+builder.Services.AddHttpClient("turnstile");
+builder.Services.AddScoped<TurnstileVerifier>();
 
 builder.Services.AddHangfire((sp, config) => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -51,6 +63,10 @@ builder.Services.AddRateLimiter(options =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: http.GetClientIp(),
             factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+    options.AddPolicy("upload", http =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: http.GetClientIp(),
+            factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1) }));
 });
 
 var app = builder.Build();
@@ -63,6 +79,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseRateLimiter();
 app.UseHangfireDashboard("/hangfire");
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 

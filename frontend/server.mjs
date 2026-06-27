@@ -13,7 +13,7 @@ const app = express();
 app.use(createProxyMiddleware({
   target: apiUrl,
   changeOrigin: true,
-  pathFilter: ['/obfuscate', '/version', '/protections'],
+  pathFilter: ['/api', '/obfuscate', '/version', '/protections'],
 }));
 app.use(express.static(path.join(__dirname, 'dist')));
 app.use((_req, res) => {

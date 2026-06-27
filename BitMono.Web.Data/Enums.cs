@@ -22,3 +22,5 @@ public enum ReportReason { Malware, Spam, Stolen, Broken, Inappropriate, Other }
 
 // ObfuscationPreset mirrors BitMono.Shared.Models exactly — do not re-number.
 public enum ObfuscationPreset { Custom, Minimal, Balanced, Maximum }
+
+public enum UserRole { User, Moderator, Admin }

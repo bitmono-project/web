@@ -10,6 +10,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
+      '/api': { target: apiTarget, changeOrigin: true },
       '/obfuscate': { target: apiTarget, changeOrigin: true },
       '/version': { target: apiTarget, changeOrigin: true },
       '/protections': { target: apiTarget, changeOrigin: true },

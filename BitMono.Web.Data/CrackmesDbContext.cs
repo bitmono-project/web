@@ -7,6 +7,7 @@ namespace BitMono.Web.Data;
 // Per-entity config lives in Configurations/ (IEntityTypeConfiguration), applied here.
 public class CrackmesDbContext(DbContextOptions<CrackmesDbContext> options) : DbContext(options)
 {
+    public DbSet<User> Users => Set<User>();
     public DbSet<Crackme> Crackmes => Set<Crackme>();
     public DbSet<Solution> Solutions => Set<Solution>();
     public DbSet<Comment> Comments => Set<Comment>();
