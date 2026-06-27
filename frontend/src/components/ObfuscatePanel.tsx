@@ -59,7 +59,7 @@ export function ObfuscatePanel() {
   const pick = (f: File | null | undefined) => {
     if (!f) return
     if (!/\.(dll|exe)$/i.test(f.name)) return fail('Only .dll / .exe assemblies.')
-    if (f.size > 30 * 1024 * 1024) return fail('Assembly is over 30 MB.')
+    if (f.size > 100 * 1024 * 1024) return fail('Assembly is over 100 MB.')
     setFile(f)
     setError('')
     setPhase('ready')
@@ -123,7 +123,7 @@ export function ObfuscatePanel() {
             <Glyph />
             <div>
               <div className="font-display text-xl font-bold text-ink">Drop your assembly</div>
-              <div className="mt-1 font-mono text-[13px] text-muted">or click to browse — .dll / .exe, up to 30&nbsp;MB</div>
+              <div className="mt-1 font-mono text-[13px] text-muted">or click to browse — .dll / .exe, up to 100&nbsp;MB</div>
             </div>
           </button>
         )}

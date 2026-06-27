@@ -27,6 +27,17 @@ public sealed class FileStore
         await content.CopyToAsync(file, ct);
     }
 
+    // Append a chunk — chunked uploads assemble the input server-side, one piece at a time, so no
+    // single request hits Cloudflare's 100 MB body cap. ponytail: sequential, no resume; add tus
+    // (resumable) only if interrupted large uploads become a real problem.
+    public async Task AppendInputAsync(Guid id, Stream content, CancellationToken ct)
+    {
+        await using var file = new FileStream(InputPath(id), FileMode.Append, FileAccess.Write);
+        await content.CopyToAsync(file, ct);
+    }
+
+    public long InputSize(Guid id) => File.Exists(InputPath(id)) ? new FileInfo(InputPath(id)).Length : 0;
+
     public Task<byte[]> ReadInputAsync(Guid id, CancellationToken ct) =>
         File.ReadAllBytesAsync(InputPath(id), ct);
 
