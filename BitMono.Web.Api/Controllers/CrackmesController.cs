@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using BitMono.Web.Api.Models;
+using BitMono.Web.Api.Progression;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
@@ -102,8 +103,44 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             .Select(r => new ReactionRow(r.Emoji, r.UserId)).ToListAsync(ct);
         var counts = raw.GroupBy(r => r.Emoji).ToDictionary(g => g.Key, g => g.Count());
         var mine = uid is null ? [] : raw.Where(r => r.UserId == uid).Select(r => r.Emoji).ToList();
+        var solvedByMe = uid is not null && await db.Solves.AsNoTracking().AnyAsync(x => x.UserId == uid && x.CrackmeId == c.Id, ct);
 
-        return ToDetail(c, isOwner: uid is not null && uid == c.UploaderUserId, counts, mine);
+        return ToDetail(c, isOwner: uid is not null && uid == c.UploaderUserId, counts, mine, solvedByMe);
+    }
+
+    [HttpPost("{slug}/solve")]
+    [Authorize]
+    public async Task<ActionResult<SolveResult>> Solve(string slug, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Crackmes.AsNoTracking().Where(Public).FirstOrDefaultAsync(x => x.Slug == slug, ct);
+        if (c is null)
+            return NotFound();
+
+        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        if (c.UploaderUserId == uid)
+            return BadRequest("You can't mark your own crackme as solved.");
+
+        var solve = await SolveRecorder.TryRecordAsync(db, c, uid, SolveSource.SelfReported, ct);
+        var solvedCount = await db.Crackmes.Where(x => x.Id == c.Id).Select(x => x.SolvedCount).FirstAsync(ct);
+        return Ok(new SolveResult(true, solvedCount, solve?.IsFirstBlood ?? false, solve?.PointsAwarded ?? 0));
+    }
+
+    [HttpDelete("{slug}/solve")]
+    [Authorize]
+    public async Task<ActionResult<SolveResult>> Unsolve(string slug, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var id = await PublicIdAsync(db, slug, ct);
+        if (id is null)
+            return NotFound();
+
+        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        await SolveRecorder.RemoveAsync(db, id.Value, uid, ct);
+        var solvedCount = await db.Crackmes.Where(x => x.Id == id.Value).Select(x => x.SolvedCount).FirstAsync(ct);
+        return Ok(new SolveResult(false, solvedCount, false, 0));
     }
 
     [HttpGet("{slug}/download")]
@@ -436,7 +473,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.SizeBytes, c.DownloadCount, c.SolvedCount, solutions, comments,
         c.IsBitMonoObfuscated, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt);
 
-    private static CrackmeDetail ToDetail(Crackme c, bool isOwner, IReadOnlyDictionary<string, int> reactions, IReadOnlyList<string> myReactions) => new(
+    private static CrackmeDetail ToDetail(Crackme c, bool isOwner, IReadOnlyDictionary<string, int> reactions, IReadOnlyList<string> myReactions, bool solvedByMe) => new(
         c.Id, c.Slug, c.Title, c.Description, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
         c.TargetPlatform, c.DotnetRuntime, c.Language,
         c.AuthorDifficulty, Avg(c.DifficultySum, c.DifficultyCount), c.DifficultyCount,
@@ -444,7 +481,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.SizeBytes, c.OriginalFileName, c.DownloadCount, c.SolvedCount,
         c.IsBitMonoObfuscated, c.Preset, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt,
         isOwner, c.ReactionsEnabled, c.CommentReactionsEnabled, reactions, myReactions,
-        c.Status, c.TakedownReason, c.TakenDownAt);
+        c.Status, c.TakedownReason, c.TakenDownAt, solvedByMe);
 
     // A stripped-down detail for a taken-down crackme: keep title/author so the page still means
     // something, but drop description/download/reactions and surface the takedown reason.
@@ -458,7 +495,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         PublishedAt: c.PublishedAt ?? c.CreatedAt, IsOwner: false,
         ReactionsEnabled: false, CommentReactionsEnabled: false,
         Reactions: new Dictionary<string, int>(), MyReactions: [],
-        Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt);
+        Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt, SolvedByMe: false);
 
     private Guid? CurrentUserId() =>
         User.Identity?.IsAuthenticated == true && Guid.TryParse(User.FindFirstValue("uid"), out var id) ? id : null;

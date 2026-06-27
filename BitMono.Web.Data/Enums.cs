@@ -24,3 +24,7 @@ public enum ReportReason { Malware, Spam, Stolen, Broken, Inappropriate, Other }
 public enum ObfuscationPreset { Custom, Minimal, Balanced, Maximum }
 
 public enum UserRole { User, Moderator, Admin }
+
+// How a solve was recorded. SelfReported = honor "I solved it"; Writeup = an approved writeup;
+// Verified = passed flag/keygen verification (the oracle seam). Append-only — stored as int.
+public enum SolveSource { SelfReported, Writeup, Verified }

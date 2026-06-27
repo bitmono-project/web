@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using BitMono.Web.Api.Auth;
 using BitMono.Web.Api.Models;
+using BitMono.Web.Api.Progression;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
@@ -183,13 +184,17 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
         var s = await db.Solutions.Include(x => x.Crackme).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s is null)
             return NotFound();
-        if (s.Status != SolutionStatus.Approved)
+        var newlyApproved = s.Status != SolutionStatus.Approved;
+        if (newlyApproved)
         {
             s.Status = SolutionStatus.Approved;
             s.UpdatedAt = DateTime.UtcNow;
-            s.Crackme.SolvedCount++;
         }
         await db.SaveChangesAsync(ct);
+        // An approved writeup credits its author as a solver — SolvedCount is now COUNT(Solve),
+        // bumped here via the recorder (replacing the old direct SolvedCount++).
+        if (newlyApproved && s.AuthorUserId is { } author)
+            await SolveRecorder.TryRecordAsync(db, s.Crackme, author, SolveSource.Writeup, ct);
         return NoContent();
     }
 

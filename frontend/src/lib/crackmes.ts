@@ -57,6 +57,7 @@ export interface CrackmeDetail {
   status: string
   takedownReason: string | null
   takenDownAt: string | null
+  solvedByMe: boolean
 }
 
 // Crackme lifecycle status (camelCased from the server enum).
@@ -164,6 +165,54 @@ export async function getMySubmissions(): Promise<MySubmission[]> {
   const res = await fetch('/api/crackmes/mine')
   if (!res.ok) return []
   return (await res.json()) as MySubmission[]
+}
+
+// --- progression: solves, points, ranks, leaderboard ---
+
+export interface SolveResult { solved: boolean; solvedCount: number; firstBlood: boolean; pointsAwarded: number }
+
+export async function markSolved(slug: string): Promise<SolveResult | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/solve`, { method: 'POST' })
+  return res.ok ? ((await res.json()) as SolveResult) : null
+}
+
+export async function unmarkSolved(slug: string): Promise<SolveResult | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/solve`, { method: 'DELETE' })
+  return res.ok ? ((await res.json()) as SolveResult) : null
+}
+
+export interface LeaderboardEntry {
+  rank: number
+  userId: string
+  displayName: string
+  avatar: string | null
+  points: number
+  solves: number
+  rankName: string
+}
+export interface LeaderboardResponse { items: LeaderboardEntry[]; total: number; page: number; pageSize: number }
+
+export async function getLeaderboard(scope: string, page = 1): Promise<LeaderboardResponse> {
+  const params = new URLSearchParams()
+  if (scope) params.set('scope', scope)
+  if (page > 1) params.set('page', String(page))
+  const res = await fetch(`/api/progression/leaderboard?${params.toString()}`)
+  if (!res.ok) return { items: [], total: 0, page: 1, pageSize: 50 }
+  return (await res.json()) as LeaderboardResponse
+}
+
+export interface MyRank {
+  points: number
+  solves: number
+  rankName: string
+  nextRankName: string | null
+  pointsToNext: number | null
+  position: number | null
+}
+
+export async function getMyRank(): Promise<MyRank | null> {
+  const res = await fetch('/api/progression/my-rank')
+  return res.ok ? ((await res.json()) as MyRank) : null
 }
 
 // --- moderation (moderator/admin only) ---

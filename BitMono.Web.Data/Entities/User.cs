@@ -17,6 +17,9 @@ public class User
     public UserRole Role { get; set; } = UserRole.User;
     public bool IsBanned { get; set; }
 
+    // Denormalized cumulative score — sum of Solve.PointsAwarded, bumped atomically on each solve.
+    public int Points { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime LastLoginAt { get; set; }
 }

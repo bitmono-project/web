@@ -24,6 +24,7 @@ function Header() {
       <nav className="flex items-center gap-5 font-mono text-[13px] text-muted">
         <Link to="/#obfuscate" className="hidden transition-colors hover:text-ink sm:inline">Obfuscate</Link>
         <Link to="/crackmes" className="transition-colors hover:text-ink">Crackmes</Link>
+        <Link to="/leaderboard" className="transition-colors hover:text-ink">Leaderboard</Link>
         {isModerator(me) && !isAdmin(me) && <Link to="/moderation" className="transition-colors hover:text-ink">Review</Link>}
         {isAdmin(me) && <Link to="/admin" className="transition-colors hover:text-acid">Admin</Link>}
         <a href="https://docs.bitmono.dev" className="hidden transition-colors hover:text-ink sm:inline">Docs</a>

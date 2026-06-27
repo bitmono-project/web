@@ -7,6 +7,7 @@ import {
   getWriteups, submitWriteup, writeupAttachmentUrl,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
   REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
+  markSolved, unmarkSolved,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
 import { type Me, isAdmin, useAuth } from '../lib/auth'
@@ -69,6 +70,8 @@ export default function CrackmeDetail() {
         <Field label="Solved" value={String(c.solvedCount)} />
         <Field label="Published" value={formatDate(c.publishedAt)} />
       </dl>
+
+      <SolveButton slug={c.slug} initialSolved={c.solvedByMe} canSolve={!!me && !c.isOwner} />
 
       <div className="mt-6">
         <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">
@@ -481,6 +484,37 @@ function WriteupsPanel({ slug, me, zipPassword }: { slug: string; me: Me | null;
       {!me && <p className="mt-3 font-mono text-[13px] text-muted">
         <Link to={`/login?returnUrl=/challenge/${slug}`} className="text-acid hover:underline">Sign in</Link> to submit a writeup.
       </p>}
+    </div>
+  )
+}
+
+// Honor-based "I solved this" toggle — gated to logged-in non-owners. Flashes the points earned.
+function SolveButton({ slug, initialSolved, canSolve }: { slug: string; initialSolved: boolean; canSolve: boolean }) {
+  const [solved, setSolved] = useState(initialSolved)
+  const [busy, setBusy] = useState(false)
+  const [flash, setFlash] = useState<string | null>(null)
+
+  if (!canSolve) return null
+
+  const toggle = async () => {
+    setBusy(true)
+    const r = solved ? await unmarkSolved(slug) : await markSolved(slug)
+    setBusy(false)
+    if (!r) return
+    setSolved(r.solved)
+    setFlash(r.solved && r.pointsAwarded > 0 ? (r.firstBlood ? `🩸 first blood · +${r.pointsAwarded}` : `+${r.pointsAwarded} pts`) : null)
+  }
+
+  return (
+    <div className="mt-6 flex items-center gap-3">
+      <button
+        onClick={toggle}
+        disabled={busy}
+        className={`rounded-full border px-4 py-2 font-mono text-sm transition-colors disabled:opacity-50 ${solved ? 'border-acid bg-acid/15 text-acid' : 'border-line text-muted hover:border-acid hover:text-acid'}`}
+      >
+        {solved ? '✓ solved' : 'mark as solved'}
+      </button>
+      {flash && <span className="font-mono text-[13px] text-acid">{flash}</span>}
     </div>
   )
 }
