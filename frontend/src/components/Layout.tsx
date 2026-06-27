@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import { Link, Outlet } from 'react-router-dom'
 import { getAppVersion } from '../lib/version'
 import { isAdmin, isModerator, useAuth } from '../lib/auth'
+import { getUnreadCount } from '../lib/notifications'
 
 export function Layout() {
   return (
@@ -33,6 +35,7 @@ function Header() {
             <span className="flex items-center gap-3">
               <Link to="/submissions" className="hidden transition-colors hover:text-ink sm:inline">submissions</Link>
               <Link to="/upload" className="text-ink transition-colors hover:text-acid">submit</Link>
+              <NotificationBell />
               <span className="hidden text-faint sm:inline">{me.name}</span>
               <button onClick={signOut} className="rounded-full border border-line px-3 py-1.5 text-ink transition-colors hover:border-acid hover:text-acid">
                 logout
@@ -66,5 +69,32 @@ function Footer() {
         </div>
       </div>
     </footer>
+  )
+}
+
+// Bell with an unread badge; polls the unread count on an interval + when the tab regains focus.
+function NotificationBell() {
+  const [unread, setUnread] = useState(0)
+  useEffect(() => {
+    let live = true
+    const load = () => getUnreadCount().then((n) => { if (live) setUnread(n) })
+    load()
+    const id = setInterval(load, 60_000)
+    const onFocus = () => load()
+    window.addEventListener('focus', onFocus)
+    return () => { live = false; clearInterval(id); window.removeEventListener('focus', onFocus) }
+  }, [])
+  return (
+    <Link to="/notifications" className="relative text-muted transition-colors hover:text-acid" title="Notifications" aria-label="Notifications">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+      </svg>
+      {unread > 0 && (
+        <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-acid px-1 text-[10px] font-bold text-void">
+          {unread > 9 ? '9+' : unread}
+        </span>
+      )}
+    </Link>
   )
 }

@@ -6,6 +6,7 @@ import CrackmesList from './pages/CrackmesList'
 import CrackmeDetail from './pages/CrackmeDetail'
 import Leaderboard from './pages/Leaderboard'
 import Profile from './pages/Profile'
+import Notifications from './pages/Notifications'
 import Upload from './pages/Upload'
 import Login from './pages/Login'
 import Moderation from './pages/Moderation'
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="upload" element={<Upload />} />
             <Route path="login" element={<Login />} />
             <Route path="submissions" element={<Submissions />} />
+            <Route path="notifications" element={<Notifications />} />
             <Route path="moderation" element={<Moderation />} />
             <Route path="admin" element={<Admin />} />
             <Route path="privacy" element={<Privacy />} />

@@ -1,3 +1,4 @@
+using BitMono.Web.Api.Notifications;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -112,6 +113,15 @@ public static class SolveRecorder
         await db.SaveChangesAsync(ct);
         await db.Users.Where(u => u.Id == userId)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.Points, u => u.Points + points), ct);
+
+        try
+        {
+            await Notifier.NotifyAsync(db, c.UploaderUserId,
+                firstBlood ? NotificationType.FirstBlood : NotificationType.SolvedYourCrackme,
+                firstBlood ? $"First blood on '{c.Title}'!" : $"Someone solved '{c.Title}'",
+                null, $"/challenge/{c.Slug}", userId, c.Id, ct);
+        }
+        catch { }
         return solve;
     }
 

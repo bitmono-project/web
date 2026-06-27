@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using BitMono.Web.Api.Auth;
 using BitMono.Web.Api.Models;
+using BitMono.Web.Api.Notifications;
 using BitMono.Web.Api.Progression;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Data;
@@ -104,6 +105,13 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             CreatedAt = now,
         });
         await db.SaveChangesAsync(ct);
+        try
+        {
+            await Notifier.NotifyAsync(db, c.UploaderUserId, NotificationType.TakenDown,
+                $"'{c.Title}' was taken down", reason, "/submissions",
+                Guid.Parse(User.FindFirstValue("uid")!), c.Id, ct);
+        }
+        catch { }
         return NoContent();
     }
 
@@ -350,6 +358,18 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             CreatedAt = now,
         });
         await db.SaveChangesAsync(ct);
+
+        var actor = Guid.Parse(User.FindFirstValue("uid")!);
+        try
+        {
+            if (approve)
+                await Notifier.NotifyAsync(db, c.UploaderUserId, NotificationType.SubmissionApproved,
+                    $"'{c.Title}' was approved", "It's live in the gallery now.", $"/challenge/{c.Slug}", actor, c.Id, ct);
+            else
+                await Notifier.NotifyAsync(db, c.UploaderUserId, NotificationType.SubmissionRejected,
+                    $"'{c.Title}' wasn't approved", message, "/submissions", actor, c.Id, ct);
+        }
+        catch { /* a notify must never break the moderation action */ }
         return NoContent();
     }
 }

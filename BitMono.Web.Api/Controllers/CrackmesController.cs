@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using BitMono.Web.Api.Models;
+using BitMono.Web.Api.Notifications;
 using BitMono.Web.Api.Progression;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Data;
@@ -52,10 +53,11 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             .Select(c => new Row(
                 c,
                 c.Solutions.Count(s => s.Status == SolutionStatus.Approved),
-                c.Comments.Count(x => !x.IsDeleted && !x.IsHidden)))
+                c.Comments.Count(x => !x.IsDeleted && !x.IsHidden),
+                c.UploaderUserId == null ? null : db.Users.Where(u => u.Id == c.UploaderUserId).Select(u => u.Handle).FirstOrDefault()))
             .ToListAsync(ct);
 
-        var items = rows.Select(r => ToListItem(r.Crackme, r.SolutionCount, r.CommentCount)).ToList();
+        var items = rows.Select(r => ToListItem(r.Crackme, r.SolutionCount, r.CommentCount, r.AuthorHandle)).ToList();
         return new CrackmeListResponse(items, total, page, size);
     }
 
@@ -240,6 +242,13 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         };
         db.Comments.Add(comment);
         await db.SaveChangesAsync(ct);
+        try
+        {
+            await Notifier.NotifyAsync(db, crackme.UploaderUserId, NotificationType.CommentOnYourCrackme,
+                $"New comment on '{crackme.Title}'", null, $"/challenge/{crackme.Slug}",
+                Guid.Parse(User.FindFirstValue("uid")!), crackme.Id, ct);
+        }
+        catch { }
         return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, comment.Body, comment.IsSpoiler, comment.CreatedAt,
             new Dictionary<string, int>(), []));
     }
@@ -426,6 +435,13 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
 
         db.Solutions.Add(solution);
         await db.SaveChangesAsync(ct);
+        try
+        {
+            await Notifier.NotifyAsync(db, crackme.UploaderUserId, NotificationType.WriteupOnYourCrackme,
+                $"New writeup on '{crackme.Title}'", null, $"/challenge/{crackme.Slug}",
+                Guid.Parse(User.FindFirstValue("uid")!), crackme.Id, ct);
+        }
+        catch { }
         return Accepted(new WriteupResponse(id, "pending"));
     }
 
@@ -469,14 +485,14 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     private static readonly Expression<Func<Crackme, bool>> Public =
         c => c.Status == CrackmeStatus.Approved && !c.IsTakenDown;
 
-    private sealed record Row(Crackme Crackme, int SolutionCount, int CommentCount);
+    private sealed record Row(Crackme Crackme, int SolutionCount, int CommentCount, string? AuthorHandle);
 
-    private static CrackmeListItem ToListItem(Crackme c, int solutions, int comments) => new(
+    private static CrackmeListItem ToListItem(Crackme c, int solutions, int comments, string? authorHandle) => new(
         c.Slug, c.Title, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
         c.TargetPlatform, c.DotnetRuntime, c.Language,
         c.AuthorDifficulty, Avg(c.DifficultySum, c.DifficultyCount), Avg(c.QualitySum, c.QualityCount),
         c.SizeBytes, c.DownloadCount, c.SolvedCount, solutions, comments,
-        c.IsBitMonoObfuscated, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt);
+        c.IsBitMonoObfuscated, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt, authorHandle);
 
     private static CrackmeDetail ToDetail(Crackme c, bool isOwner, IReadOnlyDictionary<string, int> reactions, IReadOnlyList<string> myReactions, bool solvedByMe, string? authorHandle) => new(
         c.Id, c.Slug, c.Title, c.Description, c.AnonymousHandle ?? AppConstants.AnonymousHandle,

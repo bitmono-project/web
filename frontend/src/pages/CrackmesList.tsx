@@ -94,7 +94,11 @@ function Row({ c }: { c: CrackmeListItem }) {
       <Td>
         <Link to={`/challenge/${c.slug}`} className="text-ink transition-colors hover:text-acid">{c.title}</Link>
       </Td>
-      <Td className="text-muted">{c.author}</Td>
+      <Td className="text-muted">
+        {c.authorHandle
+          ? <Link to={`/user/${c.authorHandle}`} className="transition-colors hover:text-acid">{c.author}</Link>
+          : c.author}
+      </Td>
       <Td className="text-muted">{c.runtime ?? platformLabel(c.platform)}</Td>
       <Td className="text-acid">{(c.avgDifficulty ?? difficultyNumber(c.authorDifficulty)).toFixed(1)}</Td>
       <Td className="text-muted">{c.avgQuality != null ? c.avgQuality.toFixed(1) : '—'}</Td>

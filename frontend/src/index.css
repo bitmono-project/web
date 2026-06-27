@@ -33,6 +33,11 @@ body {
   color: #000;
 }
 
+/* Every enabled button is clickable — show the pointer cursor (native buttons default to an arrow). */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 /* Blueprint grid, faded by a radial mask */
 .bg-grid {
   background-image:

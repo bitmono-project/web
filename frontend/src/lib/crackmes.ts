@@ -18,6 +18,7 @@ export interface CrackmeListItem {
   isBitMonoObfuscated: boolean
   protections: string[]
   publishedAt: string
+  authorHandle: string | null
 }
 
 export interface CrackmeListResponse {

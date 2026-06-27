@@ -33,7 +33,8 @@ public sealed record CrackmeListItem(
     int CommentCount,
     bool IsBitMonoObfuscated,
     IReadOnlyList<string> Protections,
-    DateTime PublishedAt);
+    DateTime PublishedAt,
+    string? AuthorHandle);
 
 public sealed record CrackmeListResponse(IReadOnlyList<CrackmeListItem> Items, int Total, int Page, int PageSize);
 

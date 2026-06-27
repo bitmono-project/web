@@ -28,3 +28,11 @@ public enum UserRole { User, Moderator, Admin }
 // How a solve was recorded. SelfReported = honor "I solved it"; Writeup = an approved writeup;
 // Verified = passed flag/keygen verification (the oracle seam). Append-only — stored as int.
 public enum SolveSource { SelfReported, Writeup, Verified }
+
+// In-app notification kinds. Append-only — stored as int.
+public enum NotificationType
+{
+    SubmissionApproved, SubmissionRejected, TakenDown,
+    CommentOnYourCrackme, WriteupOnYourCrackme,
+    SolvedYourCrackme, FirstBlood,
+}

@@ -5,8 +5,8 @@ using Microsoft.EntityFrameworkCore;
 namespace BitMono.Web.MigrationService.Seeding;
 
 // Dev-only sample crackmes so the gallery isn't empty before real uploads exist.
-// Invoked by EF Core's UseAsyncSeeding hook (runs on EnsureCreated/Migrate). No-op in prod
-// and once any crackme exists. appdb is dropped + recreated each dev run, so it re-seeds cleanly.
+// Invoked by the migrations Worker after appdb is (re)created. No-op in prod and once any
+// crackme exists. Authors get real "seed" user accounts so their names link to profiles.
 public static class CrackmeSeed
 {
     public static async Task SeedAsync(CrackmesDbContext db, IHostEnvironment environment, CancellationToken ct = default)
@@ -18,6 +18,28 @@ public static class CrackmeSeed
 
         var now = DateTime.UtcNow;
         AppliedProtection[] P(params string[] names) => names.Select(n => new AppliedProtection { Name = n }).ToArray();
+
+        // Real accounts for the sample authors so their names are clickable → profile.
+        var authors = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
+        Guid Author(string name)
+        {
+            if (!authors.TryGetValue(name, out var u))
+            {
+                u = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Provider = "seed",
+                    ProviderUserId = name,
+                    DisplayName = name,
+                    Handle = name.ToLowerInvariant(),
+                    Role = UserRole.User,
+                    CreatedAt = now,
+                    LastLoginAt = now,
+                };
+                authors[name] = u;
+            }
+            return u.Id;
+        }
 
         var samples = new[]
         {
@@ -47,10 +69,11 @@ public static class CrackmeSeed
                 142_000, true, now.AddDays(-20), difSum: 24, difCnt: 4, qSum: 22, qCnt: 4, downloads: 125, solved: 0),
         };
 
+        db.Users.AddRange(authors.Values);
         db.Crackmes.AddRange(samples);
         await db.SaveChangesAsync(ct);
 
-        static Crackme New(
+        Crackme New(
             string slug, string title, string desc, string author, Difficulty difficulty,
             TargetPlatform platform, string runtime, SourceLanguage language, ObfuscationPreset preset,
             AppliedProtection[] protections, long size, bool isBitMono, DateTime published,
@@ -61,6 +84,7 @@ public static class CrackmeSeed
             Title = title,
             Description = desc,
             AnonymousHandle = author,
+            UploaderUserId = Author(author),
             AuthorDifficulty = difficulty,
             TargetPlatform = platform,
             DotnetRuntime = runtime,
