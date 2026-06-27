@@ -38,6 +38,7 @@ public sealed record CrackmeListItem(
 public sealed record CrackmeListResponse(IReadOnlyList<CrackmeListItem> Items, int Total, int Page, int PageSize);
 
 public sealed record CrackmeDetail(
+    Guid Id,
     string Slug,
     string Title,
     string? Description,

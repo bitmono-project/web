@@ -437,7 +437,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.IsBitMonoObfuscated, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt);
 
     private static CrackmeDetail ToDetail(Crackme c, bool isOwner, IReadOnlyDictionary<string, int> reactions, IReadOnlyList<string> myReactions) => new(
-        c.Slug, c.Title, c.Description, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
+        c.Id, c.Slug, c.Title, c.Description, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
         c.TargetPlatform, c.DotnetRuntime, c.Language,
         c.AuthorDifficulty, Avg(c.DifficultySum, c.DifficultyCount), c.DifficultyCount,
         Avg(c.QualitySum, c.QualityCount), c.QualityCount,
@@ -449,7 +449,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     // A stripped-down detail for a taken-down crackme: keep title/author so the page still means
     // something, but drop description/download/reactions and surface the takedown reason.
     private static CrackmeDetail Tombstone(Crackme c) => new(
-        c.Slug, c.Title, Description: null, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
+        c.Id, c.Slug, c.Title, Description: null, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
         c.TargetPlatform, c.DotnetRuntime, c.Language,
         c.AuthorDifficulty, AvgDifficulty: null, DifficultyCount: 0,
         AvgQuality: null, QualityCount: 0,
