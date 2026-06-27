@@ -11,6 +11,7 @@ import {
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
 import { type Me, isAdmin, useAuth } from '../lib/auth'
+import { PromptDialog, TAKEDOWN_PRESETS } from '../components/PromptDialog'
 import { getConfig } from '../lib/config'
 
 export default function CrackmeDetail() {
@@ -164,14 +165,14 @@ function Tombstone({ c, canRestore, onRestore }: { c: Detail; canRestore: boolea
   )
 }
 
-// Admin-only takedown control on a live crackme (matches the existing reject flow's prompt UX).
+// Admin-only takedown control on a live crackme.
 function AdminControls({ c, onChange }: { c: Detail; onChange: () => void }) {
   const [busy, setBusy] = useState(false)
-  const takedown = async () => {
-    const reason = window.prompt('Takedown reason (shown publicly on the crackme page):') ?? ''
-    if (!reason.trim()) return
+  const [prompting, setPrompting] = useState(false)
+  const takedown = async (reason: string) => {
+    setPrompting(false)
     setBusy(true)
-    const ok = await takedownCrackme(c.id, reason.trim())
+    const ok = await takedownCrackme(c.id, reason)
     setBusy(false)
     if (ok) onChange()
   }
@@ -179,9 +180,21 @@ function AdminControls({ c, onChange }: { c: Detail; onChange: () => void }) {
     <div className="mt-10 rounded-lg border border-dashed border-red-400/40 bg-red-400/5 p-4">
       <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-red-400/80">Admin</div>
       <p className="mb-3 font-mono text-[12px] text-muted">Remove this crackme from the gallery. Visitors will see a takedown notice with your reason.</p>
-      <button onClick={takedown} disabled={busy} className="rounded-full border border-red-400/50 px-4 py-2 font-mono text-sm text-red-400 transition-colors hover:bg-red-400/10 disabled:opacity-50">
+      <button onClick={() => setPrompting(true)} disabled={busy} className="rounded-full border border-red-400/50 px-4 py-2 font-mono text-sm text-red-400 transition-colors hover:bg-red-400/10 disabled:opacity-50">
         {busy ? '…' : 'take down'}
       </button>
+      {prompting && (
+        <PromptDialog
+          title="Take down crackme"
+          label="Shown publicly on the crackme page and to the author."
+          placeholder="pick a reason above, or write your own"
+          confirmText="take down"
+          danger
+          presets={TAKEDOWN_PRESETS}
+          onConfirm={takedown}
+          onCancel={() => setPrompting(false)}
+        />
+      )}
     </div>
   )
 }

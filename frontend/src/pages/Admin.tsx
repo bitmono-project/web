@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isAdmin, useAuth } from '../lib/auth'
+import { PromptDialog, TAKEDOWN_PRESETS } from '../components/PromptDialog'
 import {
   type ModerationStats, type AdminCrackmeRow,
   getModerationStats, getAdminCrackmes, takedownCrackme, restoreCrackme,
@@ -139,6 +140,7 @@ function CrackmeManager() {
   const [status, setStatus] = useState('')
   const [rows, setRows] = useState<AdminCrackmeRow[]>([])
   const [busy, setBusy] = useState<string | null>(null)
+  const [takingDown, setTakingDown] = useState<AdminCrackmeRow | null>(null)
 
   const load = useCallback(() => { getAdminCrackmes(q, status).then(setRows) }, [q, status])
   useEffect(() => {
@@ -146,11 +148,10 @@ function CrackmeManager() {
     return () => clearTimeout(t)
   }, [load])
 
-  const takedown = async (row: AdminCrackmeRow) => {
-    const reason = window.prompt(`Takedown reason for “${row.title}” (shown publicly):`) ?? ''
-    if (!reason.trim()) return
+  const doTakedown = async (row: AdminCrackmeRow, reason: string) => {
+    setTakingDown(null)
     setBusy(row.id)
-    const ok = await takedownCrackme(row.id, reason.trim())
+    const ok = await takedownCrackme(row.id, reason)
     setBusy(null)
     if (ok) load()
   }
@@ -188,12 +189,24 @@ function CrackmeManager() {
             {r.isTakenDown ? (
               <button onClick={() => restore(r)} disabled={busy === r.id} className="ml-auto rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-acid hover:text-acid disabled:opacity-50">restore</button>
             ) : (
-              <button onClick={() => takedown(r)} disabled={busy === r.id} className="ml-auto rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-red-400 hover:text-red-400 disabled:opacity-50">take down</button>
+              <button onClick={() => setTakingDown(r)} disabled={busy === r.id} className="ml-auto rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-red-400 hover:text-red-400 disabled:opacity-50">take down</button>
             )}
             {r.isTakenDown && r.takedownReason && <p className="w-full font-mono text-[11px] text-orange-400/80">reason: {r.takedownReason}</p>}
           </div>
         ))}
       </div>
+      {takingDown && (
+        <PromptDialog
+          title="Take down crackme"
+          label={`“${takingDown.title}” — shown publicly on the crackme page.`}
+          placeholder="pick a reason above, or write your own"
+          confirmText="take down"
+          danger
+          presets={TAKEDOWN_PRESETS}
+          onConfirm={(reason) => doTakedown(takingDown, reason)}
+          onCancel={() => setTakingDown(null)}
+        />
+      )}
     </div>
   )
 }

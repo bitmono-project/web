@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isModerator, useAuth } from '../lib/auth'
+import { PromptDialog, REJECT_PRESETS } from '../components/PromptDialog'
 import {
   type PendingItem, type PendingWriteup, type PendingReport,
   getQueue, approveCrackme, rejectCrackme, moderationFileUrl,
@@ -16,6 +17,7 @@ export default function Moderation() {
   const [reports, setReports] = useState<PendingReport[]>([])
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
   const [busy, setBusy] = useState<string | null>(null)
+  const [rejecting, setRejecting] = useState<PendingItem | null>(null)
 
   useEffect(() => {
     if (loading || !isModerator(me)) return
@@ -45,14 +47,16 @@ export default function Moderation() {
     </main>
   )
 
-  const act = async (item: PendingItem, approve: boolean) => {
-    let message = ''
-    if (!approve) {
-      message = window.prompt('Reason for rejection (shown to the author):') ?? ''
-      if (message === '') return
-    }
+  const approve = async (item: PendingItem) => {
     setBusy(item.id)
-    const ok = approve ? await approveCrackme(item.id) : await rejectCrackme(item.id, message)
+    const ok = await approveCrackme(item.id)
+    setBusy(null)
+    if (ok) setItems((xs) => xs.filter((x) => x.id !== item.id))
+  }
+  const doReject = async (item: PendingItem, reason: string) => {
+    setRejecting(null)
+    setBusy(item.id)
+    const ok = await rejectCrackme(item.id, reason)
     setBusy(null)
     if (ok) setItems((xs) => xs.filter((x) => x.id !== item.id))
   }
@@ -95,8 +99,8 @@ export default function Moderation() {
             <p className="mt-3 break-all font-mono text-[11px] text-faint">sha256 {c.sha256}</p>
 
             <div className="mt-4 flex gap-2">
-              <button onClick={() => act(c, true)} disabled={busy === c.id} className="btn-acid disabled:opacity-50">approve</button>
-              <button onClick={() => act(c, false)} disabled={busy === c.id} className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-red-400 hover:text-red-400 disabled:opacity-50">reject</button>
+              <button onClick={() => approve(c)} disabled={busy === c.id} className="btn-acid disabled:opacity-50">approve</button>
+              <button onClick={() => setRejecting(c)} disabled={busy === c.id} className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-red-400 hover:text-red-400 disabled:opacity-50">reject</button>
             </div>
           </div>
         ))}
@@ -153,6 +157,18 @@ export default function Moderation() {
             ))}
           </div>
         </>
+      )}
+      {rejecting && (
+        <PromptDialog
+          title="Reject submission"
+          label={`“${rejecting.title}” — the reason is shown to the author.`}
+          placeholder="pick a reason above, or write your own"
+          confirmText="reject"
+          danger
+          presets={REJECT_PRESETS}
+          onConfirm={(reason) => doReject(rejecting, reason)}
+          onCancel={() => setRejecting(null)}
+        />
       )}
     </main>
   )
