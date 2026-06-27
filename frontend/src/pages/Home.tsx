@@ -43,7 +43,17 @@ export default function Home() {
       <section id="obfuscate" className="rise scroll-mt-24 pb-10" style={d(240)}>
         <ObfuscatePanel />
         <p className="mt-4 text-center font-mono text-[11px] text-faint">
-          engine · BitMono {version ? `v${version}` : '—'}
+          engine · BitMono{' '}
+          {version ? (
+            <a
+              href={`https://github.com/bitmono-project/BitMono/releases/tag/${version}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted transition-colors hover:text-acid hover:underline"
+            >
+              v{version}
+            </a>
+          ) : '—'}
         </p>
       </section>
 
