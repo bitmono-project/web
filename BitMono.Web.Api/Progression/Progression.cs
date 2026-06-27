@@ -75,18 +75,13 @@ public static class SolveRecorder
         if (await db.Solves.AsNoTracking().AnyAsync(s => s.UserId == userId && s.CrackmeId == c.Id, ct))
             return null;
 
-        var priorSolvers = c.SolvedCount;
-        var firstBlood = priorSolvers == 0;
-        var points = Scoring.PointsFor(Scoring.EffectiveDifficulty(c), priorSolvers, firstBlood);
-
+        // Insert first — the unique (UserId, CrackmeId) index is the authoritative dedup guard.
         var solve = new Solve
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             CrackmeId = c.Id,
             Source = source,
-            PointsAwarded = points,
-            IsFirstBlood = firstBlood,
             SolvedAt = DateTime.UtcNow,
         };
         db.Solves.Add(solve);
@@ -96,11 +91,25 @@ public static class SolveRecorder
         }
         catch (DbUpdateException)
         {
-            return null; // lost the race on the unique (UserId, CrackmeId) index
+            return null; // lost the race on the unique index — already solved
         }
 
-        await db.Crackmes.Where(x => x.Id == c.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.SolvedCount, x => x.SolvedCount + 1), ct);
+        // Claim first blood atomically: only the solver who flips SolvedCount 0 -> 1 wins it, so
+        // concurrent solves can't both be "first blood" (the stale-snapshot race).
+        var wonFirstBlood = await db.Crackmes.Where(x => x.Id == c.Id && x.SolvedCount == 0)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.SolvedCount, 1), ct);
+        var firstBlood = wonFirstBlood == 1;
+        if (!firstBlood)
+            await db.Crackmes.Where(x => x.Id == c.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.SolvedCount, x => x.SolvedCount + 1), ct);
+
+        // Decay is keyed on the prior solver count = the fresh post-bump count minus this solve.
+        var newCount = await db.Crackmes.AsNoTracking().Where(x => x.Id == c.Id).Select(x => x.SolvedCount).FirstAsync(ct);
+        var points = Scoring.PointsFor(Scoring.EffectiveDifficulty(c), Math.Max(0, newCount - 1), firstBlood);
+
+        solve.PointsAwarded = points;
+        solve.IsFirstBlood = firstBlood;
+        await db.SaveChangesAsync(ct);
         await db.Users.Where(u => u.Id == userId)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.Points, u => u.Points + points), ct);
         return solve;
@@ -118,7 +127,7 @@ public static class SolveRecorder
 
         await db.Crackmes.Where(x => x.Id == crackmeId && x.SolvedCount > 0)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.SolvedCount, x => x.SolvedCount - 1), ct);
-        await db.Users.Where(u => u.Id == userId)
+        await db.Users.Where(u => u.Id == userId && u.Points >= points)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.Points, u => u.Points - points), ct);
         return true;
     }

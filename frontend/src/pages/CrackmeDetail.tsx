@@ -71,7 +71,7 @@ export default function CrackmeDetail() {
         <Field label="Published" value={formatDate(c.publishedAt)} />
       </dl>
 
-      <SolveButton slug={c.slug} initialSolved={c.solvedByMe} canSolve={!!me && !c.isOwner} />
+      <SolveButton slug={c.slug} initialSolved={c.solvedByMe} canSolve={!!me && !c.isOwner} onCount={(n) => setC({ ...c, solvedCount: n })} />
 
       <div className="mt-6">
         <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">
@@ -489,7 +489,7 @@ function WriteupsPanel({ slug, me, zipPassword }: { slug: string; me: Me | null;
 }
 
 // Honor-based "I solved this" toggle — gated to logged-in non-owners. Flashes the points earned.
-function SolveButton({ slug, initialSolved, canSolve }: { slug: string; initialSolved: boolean; canSolve: boolean }) {
+function SolveButton({ slug, initialSolved, canSolve, onCount }: { slug: string; initialSolved: boolean; canSolve: boolean; onCount: (n: number) => void }) {
   const [solved, setSolved] = useState(initialSolved)
   const [busy, setBusy] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
@@ -502,6 +502,7 @@ function SolveButton({ slug, initialSolved, canSolve }: { slug: string; initialS
     setBusy(false)
     if (!r) return
     setSolved(r.solved)
+    onCount(r.solvedCount)
     setFlash(r.solved && r.pointsAwarded > 0 ? (r.firstBlood ? `🩸 first blood · +${r.pointsAwarded}` : `+${r.pointsAwarded} pts`) : null)
   }
 

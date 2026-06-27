@@ -110,6 +110,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
 
     [HttpPost("{slug}/solve")]
     [Authorize]
+    [EnableRateLimiting("comment")]
     public async Task<ActionResult<SolveResult>> Solve(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -129,6 +130,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
 
     [HttpDelete("{slug}/solve")]
     [Authorize]
+    [EnableRateLimiting("comment")]
     public async Task<ActionResult<SolveResult>> Unsolve(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
