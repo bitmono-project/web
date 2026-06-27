@@ -164,7 +164,8 @@ export function ObfuscatePanel() {
           </div>
         )}
 
-        <input ref={inputRef} type="file" accept=".dll,.exe" hidden onChange={(e) => pick(e.target.files?.[0])} />
+        {/* Reset value so re-picking the SAME file (e.g. retry after a failure) fires change again. */}
+        <input ref={inputRef} type="file" accept=".dll,.exe" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
       </div>
 
       {phase === 'error' && error && <p className="mt-3 text-center font-mono text-xs text-red-400">{error}</p>}

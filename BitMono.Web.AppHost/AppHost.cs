@@ -118,6 +118,7 @@ else
     WireParam("Crackmes__Turnstile__SiteKey", "TurnstileSiteKey", secret: false);
     WireParam("Crackmes__Turnstile__SecretKey", "TurnstileSecretKey", secret: true);
     WireParam("Crackmes__ZipPassword", "ZipPassword", secret: true);
+        WireParam("Sentry__Dsn", "SentryDsn", secret: true);   // else the runner's DSN never reaches the api container
 
     deployWeb = builder.AddDockerfile("web", "../frontend")
         .WithHttpEndpoint(port: WebDeployPort, targetPort: WebDeployPort, env: "PORT")
