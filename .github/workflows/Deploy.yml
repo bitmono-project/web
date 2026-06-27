@@ -42,15 +42,6 @@ jobs:
           echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
           echo "APP_VERSION=build.${{ github.run_number }}.${GITHUB_SHA::7}" >> $GITHUB_ENV
 
-      # The api container runs as the non-root .NET app user (APP_UID 1654). A Docker-created bind-mount
-      # source is root-owned, so the container can't write uploads → crackme upload 500s. Pre-create the
-      # blob dir owned by the app user (fall back to world-writable if we're not root on the host).
-      - name: Prepare persistent blob dir
-        run: |
-          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "${{ secrets.SSH_PORT }}" \
-            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            'mkdir -p /opt/bitmono/web/blobs && (chown -R 1654:1654 /opt/bitmono/web/blobs 2>/dev/null || chmod -R 777 /opt/bitmono/web/blobs)'
-
       - name: aspire deploy
         working-directory: BitMono.Web.AppHost
         run: aspire deploy -e Production
