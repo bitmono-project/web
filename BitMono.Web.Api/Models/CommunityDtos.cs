@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Http;
 
 namespace BitMono.Web.Api.Models;
 
-public sealed record CommentItem(Guid Id, string Author, string Body, bool IsSpoiler, DateTime CreatedAt);
+public sealed record CommentItem(
+    Guid Id, string Author, string Body, bool IsSpoiler, DateTime CreatedAt,
+    IReadOnlyDictionary<string, int> Reactions, IReadOnlyList<string> MyReactions);
 
 public sealed record CommentCreateRequest(string Body, bool IsSpoiler);
 

@@ -57,4 +57,9 @@ public sealed record CrackmeDetail(
     bool IsBitMonoObfuscated,
     ObfuscationPreset Preset,
     IReadOnlyList<string> Protections,
-    DateTime PublishedAt);
+    DateTime PublishedAt,
+    bool IsOwner,
+    bool ReactionsEnabled,
+    bool CommentReactionsEnabled,
+    IReadOnlyDictionary<string, int> Reactions,
+    IReadOnlyList<string> MyReactions);

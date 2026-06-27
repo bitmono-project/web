@@ -2,9 +2,10 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  type CrackmeDetail as Detail, type CommentItem, type MyRating, type WriteupItem,
+  type CrackmeDetail as Detail, type CommentItem, type MyRating, type WriteupItem, type ReactionSummary,
   getCrackme, getComments, postComment, getMyRating, rateCrackme,
   getWriteups, submitWriteup, writeupAttachmentUrl,
+  REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
 import { type Me, useAuth } from '../lib/auth'
@@ -72,6 +73,14 @@ export default function CrackmeDetail() {
         </div>
       </div>
 
+      {c.reactionsEnabled && (
+        <div className="mt-6">
+          <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">Reactions</div>
+          <ReactionBar initialCounts={c.reactions} initialMine={c.myReactions} canReact={!!me} toggle={(e) => toggleCrackmeReaction(c.slug, e)} />
+          {!me && <p className="mt-1 font-mono text-[11px] text-faint">sign in to react</p>}
+        </div>
+      )}
+
       {c.description && (
         <div className="mt-8">
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">Description</div>
@@ -85,8 +94,76 @@ export default function CrackmeDetail() {
 
       <RatingsPanel slug={c.slug} me={me} initial={c} />
       <WriteupsPanel slug={c.slug} me={me} />
-      <CommentsPanel slug={c.slug} me={me} />
+      <CommentsPanel slug={c.slug} me={me} commentReactionsEnabled={c.commentReactionsEnabled} />
+      {c.isOwner && (
+        <OwnerSettings
+          slug={c.slug}
+          reactionsEnabled={c.reactionsEnabled}
+          commentReactionsEnabled={c.commentReactionsEnabled}
+          onChange={(r, cr) => setC({ ...c, reactionsEnabled: r, commentReactionsEnabled: cr })}
+        />
+      )}
     </main>
+  )
+}
+
+function ReactionBar({ initialCounts, initialMine, canReact, toggle }: {
+  initialCounts: Record<string, number>
+  initialMine: string[]
+  canReact: boolean
+  toggle: (emoji: string) => Promise<ReactionSummary | null>
+}) {
+  const [counts, setCounts] = useState(initialCounts)
+  const [mine, setMine] = useState<string[]>(initialMine)
+  const [busy, setBusy] = useState(false)
+
+  const click = async (emoji: string) => {
+    if (!canReact || busy) return
+    setBusy(true)
+    const r = await toggle(emoji)
+    setBusy(false)
+    if (r) { setCounts(r.counts); setMine(r.mine) }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {REACTIONS.map((e) => {
+        const n = counts[e] ?? 0
+        const on = mine.includes(e)
+        return (
+          <button
+            key={e}
+            onClick={() => click(e)}
+            disabled={!canReact || busy}
+            className={`rounded-full border px-2 py-0.5 font-mono text-[13px] transition-colors ${on ? 'border-acid bg-acid/15 text-acid' : 'border-line text-muted'} ${canReact ? 'hover:border-acid' : 'cursor-not-allowed opacity-60'}`}
+          >
+            {e}{n > 0 && <span className="ml-1 text-[11px]">{n}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function OwnerSettings({ slug, reactionsEnabled, commentReactionsEnabled, onChange }: {
+  slug: string
+  reactionsEnabled: boolean
+  commentReactionsEnabled: boolean
+  onChange: (reactionsEnabled: boolean, commentReactionsEnabled: boolean) => void
+}) {
+  const save = async (r: boolean, cr: boolean) => {
+    if (await updateCrackmeSettings(slug, r, cr)) onChange(r, cr)
+  }
+  return (
+    <div className="mt-10 rounded-lg border border-dashed border-line bg-void/30 p-4">
+      <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">Owner settings</div>
+      <label className="flex items-center gap-2 font-mono text-[13px] text-muted">
+        <input type="checkbox" checked={reactionsEnabled} onChange={(e) => save(e.target.checked, commentReactionsEnabled)} /> allow reactions on this post
+      </label>
+      <label className="mt-1 flex items-center gap-2 font-mono text-[13px] text-muted">
+        <input type="checkbox" checked={commentReactionsEnabled} onChange={(e) => save(reactionsEnabled, e.target.checked)} /> allow reactions on comments
+      </label>
+    </div>
   )
 }
 
@@ -154,7 +231,7 @@ function Scale({ label, value, avg, count, disabled, onPick }: {
   )
 }
 
-function CommentsPanel({ slug, me }: { slug: string; me: Me | null }) {
+function CommentsPanel({ slug, me, commentReactionsEnabled }: { slug: string; me: Me | null; commentReactionsEnabled: boolean }) {
   const [comments, setComments] = useState<CommentItem[]>([])
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [body, setBody] = useState('')
@@ -186,6 +263,11 @@ function CommentsPanel({ slug, me }: { slug: string; me: Me | null }) {
             {cm.isSpoiler && !revealed.has(cm.id)
               ? <button onClick={() => setRevealed((s) => new Set(s).add(cm.id))} className="mt-1 font-mono text-[13px] text-acid hover:underline">[spoiler — click to reveal]</button>
               : <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{cm.body}</p>}
+            {commentReactionsEnabled && (
+              <div className="mt-2">
+                <ReactionBar initialCounts={cm.reactions} initialMine={cm.myReactions} canReact={!!me} toggle={(e) => toggleCommentReaction(cm.id, e)} />
+              </div>
+            )}
           </div>
         ))}
       </div>

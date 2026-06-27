@@ -63,7 +63,7 @@ public sealed class UploadController(
         await storage.SaveAsync(key, new MemoryStream(bytes, writable: false), ct);
 
         var uid = Guid.Parse(User.FindFirstValue("uid")!);
-        var handle = User.Identity?.Name ?? "anonymous";
+        var handle = User.Identity?.Name ?? AppConstants.AnonymousHandle;
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var now = DateTime.UtcNow;
 
@@ -92,6 +92,8 @@ public sealed class UploadController(
             Language = form.Language,
             Preset = form.Preset,
             IsBitMonoObfuscated = form.IsBitMonoObfuscated,
+            ReactionsEnabled = form.ReactionsEnabled,
+            CommentReactionsEnabled = form.CommentReactionsEnabled,
             ProtectionsApplied = form.Protections.Where(p => !string.IsNullOrWhiteSpace(p))
                 .Select(p => new AppliedProtection { Name = p.Trim() }).ToList(),
             StorageKey = key,

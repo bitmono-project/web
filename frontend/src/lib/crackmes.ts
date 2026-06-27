@@ -48,6 +48,11 @@ export interface CrackmeDetail {
   preset: string
   protections: string[]
   publishedAt: string
+  isOwner: boolean
+  reactionsEnabled: boolean
+  commentReactionsEnabled: boolean
+  reactions: Record<string, number>
+  myReactions: string[]
 }
 
 export interface CrackmeFilters {
@@ -167,6 +172,38 @@ export interface CommentItem {
   body: string
   isSpoiler: boolean
   createdAt: string
+  reactions: Record<string, number>
+  myReactions: string[]
+}
+
+// Reaction palette — keep in sync with the backend ReactionEmojis.Allowed.
+export const REACTIONS = ['👍', '❤️', '🔥', '🤯', '😂']
+
+export interface ReactionSummary {
+  counts: Record<string, number>
+  mine: string[]
+}
+
+export async function toggleCrackmeReaction(slug: string, emoji: string): Promise<ReactionSummary | null> {
+  const res = await fetch(`/api/reactions/crackme/${encodeURIComponent(slug)}/toggle`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
+  })
+  return res.ok ? ((await res.json()) as ReactionSummary) : null
+}
+
+export async function toggleCommentReaction(commentId: string, emoji: string): Promise<ReactionSummary | null> {
+  const res = await fetch(`/api/reactions/comment/${commentId}/toggle`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
+  })
+  return res.ok ? ((await res.json()) as ReactionSummary) : null
+}
+
+export async function updateCrackmeSettings(slug: string, reactionsEnabled: boolean, commentReactionsEnabled: boolean): Promise<boolean> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/settings`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reactionsEnabled, commentReactionsEnabled }),
+  })
+  return res.ok
 }
 
 export interface RatingResult {

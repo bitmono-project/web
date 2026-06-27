@@ -35,6 +35,8 @@ export default function Upload() {
   const [catalog, setCatalog] = useState<ProtectionInfo[]>([])
   const [protections, setProtections] = useState<Set<string>>(new Set())
   const [accepted, setAccepted] = useState([false, false, false])
+  const [reactionsEnabled, setReactionsEnabled] = useState(true)
+  const [commentReactionsEnabled, setCommentReactionsEnabled] = useState(true)
   const [phase, setPhase] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [error, setError] = useState('')
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null)
@@ -77,6 +79,8 @@ export default function Upload() {
     data.set('AcceptOriginal', String(accepted[0]))
     data.set('AcceptLegal', String(accepted[1]))
     data.set('AcceptVm', String(accepted[2]))
+    data.set('ReactionsEnabled', String(reactionsEnabled))
+    data.set('CommentReactionsEnabled', String(commentReactionsEnabled))
 
     setPhase('sending')
     setError('')
@@ -149,6 +153,15 @@ export default function Upload() {
         <label className="flex items-center gap-2 font-mono text-[13px] text-muted">
           <input type="checkbox" name="IsBitMonoObfuscated" value="true" defaultChecked /> Obfuscated with BitMono
         </label>
+
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 font-mono text-[13px] text-muted">
+            <input type="checkbox" checked={reactionsEnabled} onChange={(e) => setReactionsEnabled(e.target.checked)} /> Allow reactions on this post
+          </label>
+          <label className="flex items-center gap-2 font-mono text-[13px] text-muted">
+            <input type="checkbox" checked={commentReactionsEnabled} onChange={(e) => setCommentReactionsEnabled(e.target.checked)} /> Allow reactions on comments
+          </label>
+        </div>
 
         {catalog.length > 0 && (
           <div>

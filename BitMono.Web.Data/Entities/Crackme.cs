@@ -19,6 +19,10 @@ public class Crackme
 
     public ObfuscationPreset Preset { get; set; }
     public bool IsBitMonoObfuscated { get; set; }
+
+    // Owner-controlled (both default on): allow emoji reactions on the post / on its comments.
+    public bool ReactionsEnabled { get; set; } = true;
+    public bool CommentReactionsEnabled { get; set; } = true;
     // Authoritative when obfuscated through BitMono; author-stated otherwise. Owned JSON.
     public List<AppliedProtection> ProtectionsApplied { get; set; } = [];
 

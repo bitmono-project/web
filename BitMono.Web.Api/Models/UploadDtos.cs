@@ -20,6 +20,10 @@ public sealed class UploadForm
     public bool AcceptOriginal { get; set; } // I made this / have rights to share it
     public bool AcceptLegal { get; set; }    // not malware / commercial crack / DRM bypass
     public bool AcceptVm { get; set; }       // runs, educational, may trip AV
+
+    // Owner reaction toggles (default on; frontend always sends explicit values).
+    public bool ReactionsEnabled { get; set; } = true;
+    public bool CommentReactionsEnabled { get; set; } = true;
 }
 
 public sealed record UploadResponse(Guid Id, string Slug, string Status);

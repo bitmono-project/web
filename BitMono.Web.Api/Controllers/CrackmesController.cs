@@ -65,7 +65,17 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
 
         var c = await db.Crackmes.AsNoTracking().Where(Public).FirstOrDefaultAsync(x => x.Slug == slug, ct);
-        return c is null ? NotFound() : ToDetail(c);
+        if (c is null)
+            return NotFound();
+
+        var uid = CurrentUserId();
+        var raw = await db.Reactions.AsNoTracking()
+            .Where(r => r.TargetType == ModeratableType.Crackme && r.TargetId == c.Id)
+            .Select(r => new ReactionRow(r.Emoji, r.UserId)).ToListAsync(ct);
+        var counts = raw.GroupBy(r => r.Emoji).ToDictionary(g => g.Key, g => g.Count());
+        var mine = uid is null ? [] : raw.Where(r => r.UserId == uid).Select(r => r.Emoji).ToList();
+
+        return ToDetail(c, isOwner: uid is not null && uid == c.UploaderUserId, counts, mine);
     }
 
     [HttpGet("{slug}/download")]
@@ -105,12 +115,28 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (id is null)
             return NotFound();
 
-        var comments = await db.Comments.AsNoTracking()
+        var rows = await db.Comments.AsNoTracking()
             .Where(c => c.CrackmeId == id && !c.IsDeleted && !c.IsHidden)
             .OrderBy(c => c.CreatedAt)
-            .Select(c => new CommentItem(c.Id, c.AnonymousHandle ?? "anonymous", c.Body, c.IsSpoiler, c.CreatedAt))
+            .Select(c => new CommentRow(c.Id, c.AnonymousHandle, c.Body, c.IsSpoiler, c.CreatedAt))
             .ToListAsync(ct);
-        return Ok(comments);
+
+        var ids = rows.Select(r => r.Id).ToList();
+        var reactions = await db.Reactions.AsNoTracking()
+            .Where(r => r.TargetType == ModeratableType.Comment && ids.Contains(r.TargetId))
+            .Select(r => new CommentReactionRow(r.TargetId, r.Emoji, r.UserId)).ToListAsync(ct);
+        var uid = CurrentUserId();
+
+        var items = rows.Select(r =>
+        {
+            var rs = reactions.Where(x => x.TargetId == r.Id).ToList();
+            var counts = rs.GroupBy(x => x.Emoji).ToDictionary(g => g.Key, g => g.Count());
+            IReadOnlyList<string> myReactions = uid is null
+                ? []
+                : rs.Where(x => x.UserId == uid).Select(x => x.Emoji).ToList();
+            return new CommentItem(r.Id, r.Author ?? AppConstants.AnonymousHandle, r.Body, r.IsSpoiler, r.CreatedAt, counts, myReactions);
+        }).ToList();
+        return Ok(items);
     }
 
     [HttpPost("{slug}/comments")]
@@ -136,7 +162,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             Id = Guid.NewGuid(),
             CrackmeId = crackme.Id,
             AuthorUserId = Guid.Parse(User.FindFirstValue("uid")!),
-            AnonymousHandle = User.Identity?.Name ?? "anonymous",
+            AnonymousHandle = User.Identity?.Name ?? AppConstants.AnonymousHandle,
             Body = body,
             IsSpoiler = req.IsSpoiler,
             CreatedAt = now,
@@ -144,7 +170,8 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         };
         db.Comments.Add(comment);
         await db.SaveChangesAsync(ct);
-        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, comment.Body, comment.IsSpoiler, comment.CreatedAt));
+        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, comment.Body, comment.IsSpoiler, comment.CreatedAt,
+            new Dictionary<string, int>(), []));
     }
 
     [HttpGet("{slug}/my-rating")]
@@ -212,6 +239,26 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             Avg(crackme.QualitySum, crackme.QualityCount), crackme.QualityCount));
     }
 
+    [HttpPatch("{slug}/settings")]
+    [Authorize]
+    public async Task<IActionResult> UpdateSettings(string slug, [FromBody] CrackmeSettingsRequest req, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Crackmes.FirstOrDefaultAsync(x => x.Slug == slug, ct);
+        if (c is null)
+            return NotFound();
+        if (c.UploaderUserId != CurrentUserId()
+            && !User.IsInRole(nameof(UserRole.Moderator)) && !User.IsInRole(nameof(UserRole.Admin)))
+            return Forbid();
+
+        c.ReactionsEnabled = req.ReactionsEnabled;
+        c.CommentReactionsEnabled = req.CommentReactionsEnabled;
+        c.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
     [HttpGet("{slug}/writeups")]
     public async Task<ActionResult<IReadOnlyList<WriteupItem>>> Writeups(string slug, CancellationToken ct)
     {
@@ -224,7 +271,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var writeups = await db.Solutions.AsNoTracking()
             .Where(s => s.CrackmeId == id && s.Status == SolutionStatus.Approved)
             .OrderByDescending(s => s.UpvoteCount).ThenBy(s => s.CreatedAt)
-            .Select(s => new WriteupItem(s.Id, s.AnonymousHandle ?? "anonymous", s.Title, s.BodyMarkdown, s.HasAttachment, s.UpvoteCount, s.CreatedAt))
+            .Select(s => new WriteupItem(s.Id, s.AnonymousHandle ?? AppConstants.AnonymousHandle, s.Title, s.BodyMarkdown, s.HasAttachment, s.UpvoteCount, s.CreatedAt))
             .ToListAsync(ct);
         return Ok(writeups);
     }
@@ -253,7 +300,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             Id = id,
             CrackmeId = crackme.Id,
             AuthorUserId = Guid.Parse(User.FindFirstValue("uid")!),
-            AnonymousHandle = User.Identity?.Name ?? "anonymous",
+            AnonymousHandle = User.Identity?.Name ?? AppConstants.AnonymousHandle,
             Title = string.IsNullOrWhiteSpace(form.Title) ? null : form.Title.Trim(),
             BodyMarkdown = body,
             Status = SolutionStatus.Pending,
@@ -326,19 +373,23 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     private sealed record Row(Crackme Crackme, int SolutionCount, int CommentCount);
 
     private static CrackmeListItem ToListItem(Crackme c, int solutions, int comments) => new(
-        c.Slug, c.Title, c.AnonymousHandle ?? "anonymous",
+        c.Slug, c.Title, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
         c.TargetPlatform, c.DotnetRuntime, c.Language,
         c.AuthorDifficulty, Avg(c.DifficultySum, c.DifficultyCount), Avg(c.QualitySum, c.QualityCount),
         c.SizeBytes, c.DownloadCount, c.SolvedCount, solutions, comments,
         c.IsBitMonoObfuscated, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt);
 
-    private static CrackmeDetail ToDetail(Crackme c) => new(
-        c.Slug, c.Title, c.Description, c.AnonymousHandle ?? "anonymous",
+    private static CrackmeDetail ToDetail(Crackme c, bool isOwner, IReadOnlyDictionary<string, int> reactions, IReadOnlyList<string> myReactions) => new(
+        c.Slug, c.Title, c.Description, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
         c.TargetPlatform, c.DotnetRuntime, c.Language,
         c.AuthorDifficulty, Avg(c.DifficultySum, c.DifficultyCount), c.DifficultyCount,
         Avg(c.QualitySum, c.QualityCount), c.QualityCount,
         c.SizeBytes, c.OriginalFileName, c.DownloadCount, c.SolvedCount,
-        c.IsBitMonoObfuscated, c.Preset, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt);
+        c.IsBitMonoObfuscated, c.Preset, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt,
+        isOwner, c.ReactionsEnabled, c.CommentReactionsEnabled, reactions, myReactions);
+
+    private Guid? CurrentUserId() =>
+        User.Identity?.IsAuthenticated == true && Guid.TryParse(User.FindFirstValue("uid"), out var id) ? id : null;
 
     private static List<string> EnabledProtections(Crackme c) =>
         c.ProtectionsApplied.Where(p => p.Enabled).Select(p => p.Name).ToList();

@@ -27,7 +27,7 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             .ToListAsync(ct);
 
         return rows.Select(c => new PendingItem(
-            c.Id, c.Slug, c.Title, c.Description, c.AnonymousHandle ?? "anonymous",
+            c.Id, c.Slug, c.Title, c.Description, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
             c.TargetPlatform, c.DotnetRuntime, c.Language, c.AuthorDifficulty,
             c.SizeBytes, c.Sha256, c.IsBitMonoObfuscated,
             c.ProtectionsApplied.Where(p => p.Enabled).Select(p => p.Name).ToList(), c.CreatedAt)).ToList();
@@ -73,7 +73,7 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             .Where(s => s.Status == SolutionStatus.Pending)
             .OrderBy(s => s.CreatedAt)
             .Select(s => new PendingWriteup(
-                s.Id, s.Crackme.Slug, s.Crackme.Title, s.AnonymousHandle ?? "anonymous",
+                s.Id, s.Crackme.Slug, s.Crackme.Title, s.AnonymousHandle ?? AppConstants.AnonymousHandle,
                 s.Title, s.BodyMarkdown, s.HasAttachment, s.CreatedAt))
             .ToListAsync(ct);
     }
