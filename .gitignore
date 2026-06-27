@@ -417,3 +417,6 @@ Thumbs.db
 # bitmono-web runtime / generated
 **/App_Data/
 **/aspire-output/
+
+# Playwright MCP scratch output (screenshots / page snapshots from research browsing)
+.playwright-mcp/
