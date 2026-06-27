@@ -7,7 +7,7 @@ import {
   getWriteups, submitWriteup, writeupAttachmentUrl,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
   REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
-  markSolved, unmarkSolved,
+  markSolved, unmarkSolved, submitFlag, setVerification, VERIFICATION_KINDS,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
 import { type Me, isAdmin, useAuth } from '../lib/auth'
@@ -76,7 +76,9 @@ export default function CrackmeDetail() {
         <Field label="Published" value={formatDate(c.publishedAt)} />
       </dl>
 
-      <SolveButton slug={c.slug} initialSolved={c.solvedByMe} canSolve={!!me && !c.isOwner} onCount={(n) => setC({ ...c, solvedCount: n })} />
+      {c.verificationKind === 'none'
+        ? <SolveButton slug={c.slug} initialSolved={c.solvedByMe} canSolve={!!me && !c.isOwner} onCount={(n) => setC({ ...c, solvedCount: n })} />
+        : <FlagSubmit slug={c.slug} initialSolved={c.solvedByMe} me={me} isOwner={c.isOwner} onCount={(n) => setC({ ...c, solvedCount: n })} />}
 
       <div className="mt-6">
         <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">
@@ -116,12 +118,15 @@ export default function CrackmeDetail() {
       <WriteupsPanel slug={c.slug} me={me} zipPassword={zipPassword} />
       <CommentsPanel slug={c.slug} me={me} commentReactionsEnabled={c.commentReactionsEnabled} />
       {c.isOwner && (
-        <OwnerSettings
-          slug={c.slug}
-          reactionsEnabled={c.reactionsEnabled}
-          commentReactionsEnabled={c.commentReactionsEnabled}
-          onChange={(r, cr) => setC({ ...c, reactionsEnabled: r, commentReactionsEnabled: cr })}
-        />
+        <>
+          <OwnerSettings
+            slug={c.slug}
+            reactionsEnabled={c.reactionsEnabled}
+            commentReactionsEnabled={c.commentReactionsEnabled}
+            onChange={(r, cr) => setC({ ...c, reactionsEnabled: r, commentReactionsEnabled: cr })}
+          />
+          <VerificationSettings slug={c.slug} current={c.verificationKind} onChange={(k) => setC({ ...c, verificationKind: k })} />
+        </>
       )}
       {isAdmin(me) && <AdminControls c={c} onChange={reload} />}
     </main>
@@ -533,6 +538,120 @@ function SolveButton({ slug, initialSolved, canSolve, onCount }: { slug: string;
         {solved ? '✓ solved' : 'mark as solved'}
       </button>
       {flash && <span className="font-mono text-[13px] text-acid">{flash}</span>}
+    </div>
+  )
+}
+
+// Verified solve: the solver submits the answer (serial / keygen output / flag) and the server checks it.
+// A wrong answer says so inline; a correct one flips to "solved" and flashes the points, like SolveButton.
+function FlagSubmit({ slug, initialSolved, me, isOwner, onCount }: {
+  slug: string; initialSolved: boolean; me: Me | null; isOwner: boolean; onCount: (n: number) => void
+}) {
+  const [solved, setSolved] = useState(initialSolved)
+  const [answer, setAnswer] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [wrong, setWrong] = useState(false)
+  const [flash, setFlash] = useState<string | null>(null)
+
+  if (solved) return (
+    <div className="mt-6 flex items-center gap-3">
+      <span className="rounded-full border border-acid bg-acid/15 px-4 py-2 font-mono text-sm text-acid">✓ solved — answer verified</span>
+      {flash && <span className="font-mono text-[13px] text-acid">{flash}</span>}
+    </div>
+  )
+  if (isOwner) return null
+  if (!me) return (
+    <p className="mt-6 font-mono text-[13px] text-muted">
+      <Link to={`/login?returnUrl=/challenge/${slug}`} className="text-acid hover:underline">Sign in</Link> to submit your answer.
+    </p>
+  )
+
+  const submit = async () => {
+    if (!answer.trim()) return
+    setBusy(true)
+    const r = await submitFlag(slug, answer.trim())
+    setBusy(false)
+    if (!r) return
+    if (r.correct) {
+      setSolved(true)
+      onCount(r.solvedCount)
+      setFlash(r.firstBlood ? `🩸 first blood · +${r.pointsAwarded}` : r.pointsAwarded > 0 ? `+${r.pointsAwarded} pts` : 'solved!')
+    } else {
+      setWrong(true)
+    }
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">Prove it — submit the answer</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={answer}
+          onChange={(e) => { setAnswer(e.target.value); setWrong(false) }}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+          placeholder="serial / key / flag"
+          className="w-full max-w-xs rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
+        />
+        <button onClick={submit} disabled={busy || !answer.trim()} className="btn-acid disabled:opacity-50">{busy ? '…' : 'submit'}</button>
+        {wrong && <span className="font-mono text-[13px] text-red-400">nope — try again</span>}
+      </div>
+    </div>
+  )
+}
+
+// Owner-only: choose how solves are verified and set the secret answer. The answer is hashed server-side
+// and never returned, so the field starts empty — blank + unchanged kind keeps the current one.
+function VerificationSettings({ slug, current, onChange }: { slug: string; current: string; onChange: (kind: string) => void }) {
+  const [kind, setKind] = useState(current)
+  const [answer, setAnswer] = useState('')
+  const [phase, setPhase] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  const needsAnswer = kind !== 'none'
+  const isRegex = kind === 'regex'
+  const mustProvideAnswer = needsAnswer && (kind !== current || current === 'none')
+
+  const save = async () => {
+    setPhase('saving'); setError(null)
+    const res = await setVerification(slug, kind, needsAnswer ? answer.trim() : null)
+    if (res.ok) { setPhase('saved'); setAnswer(''); onChange(kind) }
+    else { setPhase('error'); setError(res.error) }
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-dashed border-line bg-void/30 p-4">
+      <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">Solve verification</div>
+      <p className="mb-3 font-mono text-[12px] leading-relaxed text-muted">
+        Make solvers submit the right answer — a serial, keygen output, or flag — instead of the honor button.
+        It’s hashed on the server, never stored in plain text or shown again.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={kind}
+          onChange={(e) => { setKind(e.target.value); setPhase('idle') }}
+          className="rounded-lg border border-line bg-surface px-2 py-1.5 font-mono text-[12px] text-ink outline-none focus:border-acid"
+        >
+          {VERIFICATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+        </select>
+        {needsAnswer && (
+          <input
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            placeholder={isRegex ? 'regex, e.g. ^BITMONO-\\d{4}$' : current !== 'none' ? 'new answer (blank keeps current)' : 'the correct answer'}
+            className="min-w-[15rem] flex-1 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-[12px] text-ink outline-none focus:border-acid"
+          />
+        )}
+        <button
+          onClick={save}
+          disabled={phase === 'saving' || (mustProvideAnswer && !answer.trim())}
+          className="rounded-full border border-line px-3 py-1.5 font-mono text-[12px] text-ink transition-colors hover:border-acid hover:text-acid disabled:opacity-50"
+        >
+          {phase === 'saving' ? '…' : 'save'}
+        </button>
+      </div>
+      {phase === 'saved' && <p className="mt-2 font-mono text-[12px] text-acid">Saved.</p>}
+      {phase === 'error' && <p className="mt-2 font-mono text-[12px] text-red-400">{error ?? 'Save failed.'}</p>}
+      {current !== 'none' && <p className="mt-2 font-mono text-[11px] text-faint">An answer is set. Leave the field blank to keep it, or type a new one to replace it.</p>}
     </div>
   )
 }

@@ -49,6 +49,13 @@ public class Crackme
     public DateTime? TakenDownAt { get; set; }
     [MaxLength(1000)] public string? TakedownReason { get; set; }
 
+    // Optional solve verification — the author sets an answer; solvers prove it via /submit-flag.
+    // These NEVER appear in any DTO (the hash/pattern stay server-side only).
+    public VerificationKind VerificationKind { get; set; } = VerificationKind.None;
+    [MaxLength(128)] public string? VerificationHash { get; set; }   // PBKDF2 of the answer (Exact* kinds)
+    [MaxLength(64)] public string? VerificationSalt { get; set; }
+    [MaxLength(500)] public string? VerificationPattern { get; set; } // regex (Regex kind)
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }

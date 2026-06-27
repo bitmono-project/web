@@ -1,10 +1,12 @@
 using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Notifications;
 using BitMono.Web.Api.Progression;
 using BitMono.Web.Api.Storage;
+using BitMono.Web.Api.Verification;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -127,6 +129,8 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var uid = Guid.Parse(User.FindFirstValue("uid")!);
         if (c.UploaderUserId == uid)
             return BadRequest("You can't mark your own crackme as solved.");
+        if (c.VerificationKind != VerificationKind.None)
+            return BadRequest("This crackme requires submitting the correct answer — use Submit flag.");
 
         var solve = await SolveRecorder.TryRecordAsync(db, c, uid, SolveSource.SelfReported, ct);
         var solvedCount = await db.Crackmes.Where(x => x.Id == c.Id).Select(x => x.SolvedCount).FirstAsync(ct);
@@ -148,6 +152,110 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         await SolveRecorder.RemoveAsync(db, id.Value, uid, ct);
         var solvedCount = await db.Crackmes.Where(x => x.Id == id.Value).Select(x => x.SolvedCount).FirstAsync(ct);
         return Ok(new SolveResult(false, solvedCount, false, 0));
+    }
+
+    // Owner/admin sets (or clears) the solve answer. The raw answer is never stored — Exact* kinds keep
+    // only a PBKDF2 hash; Regex keeps the pattern. Switching to None clears everything.
+    [HttpPut("{slug}/verification")]
+    [Authorize]
+    public async Task<IActionResult> SetVerification(string slug, [FromBody] VerificationRequest req, CancellationToken ct)
+    {
+        if (!Enum.TryParse<VerificationKind>(req.Kind, ignoreCase: true, out var kind))
+            return BadRequest("Unknown verification kind.");
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Crackmes.FirstOrDefaultAsync(x => x.Slug == slug, ct);
+        if (c is null)
+            return NotFound();
+        if (c.UploaderUserId != CurrentUserId()
+            && !User.IsInRole(nameof(UserRole.Moderator)) && !User.IsInRole(nameof(UserRole.Admin)))
+            return Forbid();
+
+        var answer = req.Answer?.Trim();
+
+        // Blank answer + same kind that already has a secret = "leave it as-is" — don't force a retype.
+        if (string.IsNullOrEmpty(answer) && kind == c.VerificationKind && kind != VerificationKind.None)
+            return NoContent();
+
+        switch (kind)
+        {
+            case VerificationKind.None:
+                c.VerificationHash = c.VerificationSalt = c.VerificationPattern = null;
+                break;
+            case VerificationKind.Regex:
+                if (string.IsNullOrEmpty(answer))
+                    return BadRequest("A regex pattern is required.");
+                try { _ = new Regex(answer, RegexOptions.None, RegexMatchTimeout); }
+                catch (ArgumentException) { return BadRequest("That isn't a valid regular expression."); }
+                c.VerificationPattern = answer;
+                c.VerificationHash = c.VerificationSalt = null;
+                break;
+            default: // ExactCaseInsensitive / ExactCaseSensitive
+                if (string.IsNullOrEmpty(answer))
+                    return BadRequest("An answer is required.");
+                var normalized = kind == VerificationKind.ExactCaseInsensitive ? answer.ToLowerInvariant() : answer;
+                (c.VerificationHash, c.VerificationSalt) = VerificationHasher.Hash(normalized);
+                c.VerificationPattern = null;
+                break;
+        }
+        c.VerificationKind = kind;
+        c.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    // A solver proves they cracked it. A wrong answer returns 200 { correct=false } (not an error) so the
+    // UI can say "nope, try again" without console noise; a correct answer records a Verified solve.
+    [HttpPost("{slug}/submit-flag")]
+    [Authorize]
+    [EnableRateLimiting("comment")]
+    public async Task<ActionResult<FlagResult>> SubmitFlag(string slug, [FromBody] FlagSubmitRequest req, CancellationToken ct)
+    {
+        var answer = req.Answer?.Trim();
+        if (string.IsNullOrEmpty(answer))
+            return BadRequest("Enter an answer.");
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Crackmes.AsNoTracking().Where(Public).FirstOrDefaultAsync(x => x.Slug == slug, ct);
+        if (c is null)
+            return NotFound();
+        if (c.VerificationKind == VerificationKind.None)
+            return BadRequest("This crackme doesn't use answer verification.");
+
+        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        if (c.UploaderUserId == uid)
+            return BadRequest("You can't solve your own crackme.");
+
+        if (!IsAnswerCorrect(c, answer))
+        {
+            var current = await db.Crackmes.Where(x => x.Id == c.Id).Select(x => x.SolvedCount).FirstAsync(ct);
+            return Ok(new FlagResult(false, current, false, 0));
+        }
+
+        var solve = await SolveRecorder.TryRecordAsync(db, c, uid, SolveSource.Verified, ct);
+        var solvedCount = await db.Crackmes.Where(x => x.Id == c.Id).Select(x => x.SolvedCount).FirstAsync(ct);
+        return Ok(new FlagResult(true, solvedCount, solve?.IsFirstBlood ?? false, solve?.PointsAwarded ?? 0));
+    }
+
+    // Author-supplied regex runs against solver input — cap it so a pathological pattern can't hang a request.
+    private static readonly TimeSpan RegexMatchTimeout = TimeSpan.FromMilliseconds(100);
+
+    private static bool IsAnswerCorrect(Crackme c, string answer) => c.VerificationKind switch
+    {
+        VerificationKind.ExactCaseInsensitive => c.VerificationHash is not null && c.VerificationSalt is not null
+            && VerificationHasher.Verify(answer.ToLowerInvariant(), c.VerificationHash, c.VerificationSalt),
+        VerificationKind.ExactCaseSensitive => c.VerificationHash is not null && c.VerificationSalt is not null
+            && VerificationHasher.Verify(answer, c.VerificationHash, c.VerificationSalt),
+        VerificationKind.Regex => c.VerificationPattern is not null && TryRegex(c.VerificationPattern, answer),
+        _ => false,
+    };
+
+    private static bool TryRegex(string pattern, string answer)
+    {
+        try { return Regex.IsMatch(answer, pattern, RegexOptions.None, RegexMatchTimeout); }
+        catch (RegexMatchTimeoutException) { return false; }
     }
 
     [HttpGet("{slug}/download")]
@@ -502,7 +610,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.SizeBytes, c.OriginalFileName, c.DownloadCount, c.SolvedCount,
         c.IsBitMonoObfuscated, c.Preset, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt,
         isOwner, c.ReactionsEnabled, c.CommentReactionsEnabled, reactions, myReactions,
-        c.Status, c.TakedownReason, c.TakenDownAt, solvedByMe, authorHandle);
+        c.Status, c.TakedownReason, c.TakenDownAt, solvedByMe, authorHandle, c.VerificationKind);
 
     // A stripped-down detail for a taken-down crackme: keep title/author so the page still means
     // something, but drop description/download/reactions and surface the takedown reason.
@@ -516,7 +624,8 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         PublishedAt: c.PublishedAt ?? c.CreatedAt, IsOwner: false,
         ReactionsEnabled: false, CommentReactionsEnabled: false,
         Reactions: new Dictionary<string, int>(), MyReactions: [],
-        Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt, SolvedByMe: false, AuthorHandle: null);
+        Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt,
+        SolvedByMe: false, AuthorHandle: null, VerificationKind: VerificationKind.None);
 
     private Guid? CurrentUserId() =>
         User.Identity?.IsAuthenticated == true && Guid.TryParse(User.FindFirstValue("uid"), out var id) ? id : null;

@@ -60,6 +60,7 @@ export interface CrackmeDetail {
   takenDownAt: string | null
   solvedByMe: boolean
   authorHandle: string | null
+  verificationKind: string // none | exactCaseInsensitive | exactCaseSensitive | regex
 }
 
 // Crackme lifecycle status (camelCased from the server enum).
@@ -181,6 +182,37 @@ export async function markSolved(slug: string): Promise<SolveResult | null> {
 export async function unmarkSolved(slug: string): Promise<SolveResult | null> {
   const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/solve`, { method: 'DELETE' })
   return res.ok ? ((await res.json()) as SolveResult) : null
+}
+
+// --- solve verification (keygen / flag oracle) ---
+
+// Pick list for the owner's verification config. Values are the camelCased server enum names.
+export const VERIFICATION_KINDS = [
+  { value: 'none', label: 'Honor system — no answer required' },
+  { value: 'exactCaseInsensitive', label: 'Exact answer (ignore case)' },
+  { value: 'exactCaseSensitive', label: 'Exact answer (case-sensitive)' },
+  { value: 'regex', label: 'Regex pattern' },
+]
+
+export interface FlagResult { correct: boolean; solvedCount: number; firstBlood: boolean; pointsAwarded: number }
+
+// A wrong answer still returns 200 { correct:false }; only transport/auth failures return null.
+export async function submitFlag(slug: string, answer: string): Promise<FlagResult | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/submit-flag`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answer }),
+  })
+  return res.ok ? ((await res.json()) as FlagResult) : null
+}
+
+// Owner/admin sets or clears the answer. answer is the serial (Exact*) or pattern (Regex); null/blank
+// keeps the existing one when the kind is unchanged. Surfaces the server's validation message on failure.
+export async function setVerification(slug: string, kind: string, answer: string | null): Promise<{ ok: boolean; error: string | null }> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/verification`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, answer }),
+  })
+  if (res.ok) return { ok: true, error: null }
+  const text = (await res.text().catch(() => '')).replace(/^"|"$/g, '')
+  return { ok: false, error: text || `Failed (${res.status})` }
 }
 
 export interface LeaderboardEntry {

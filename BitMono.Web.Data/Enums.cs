@@ -39,3 +39,7 @@ public enum NotificationType
 
 // Badge tiers, for the rarity tint on the shelf. Append-only — stored as int.
 public enum BadgeRarity { Common, Rare, Epic, Legendary }
+
+// How a crackme's solve is verified. None = honor "I solved it"; the others check a submitted
+// answer server-side (no code execution). Append-only — stored as int.
+public enum VerificationKind { None, ExactCaseInsensitive, ExactCaseSensitive, Regex }
