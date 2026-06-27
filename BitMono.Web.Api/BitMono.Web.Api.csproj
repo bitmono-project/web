@@ -13,7 +13,7 @@
     <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.6" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.StackExchangeRedis" Version="10.0.0" />
-    <PackageReference Include="Aspire.Npgsql" Version="13.2.4" />
+    <PackageReference Include="Aspire.Npgsql" Version="13.4.6" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.4" />
     <PackageReference Include="Aspire.StackExchange.Redis" Version="13.2.4" />
     <!-- pin: override Hangfire's vulnerable transitive Newtonsoft.Json 11.0.1 (GHSA-5crp-9r3c-p9vr) -->
