@@ -62,4 +62,22 @@ public sealed record CrackmeDetail(
     bool ReactionsEnabled,
     bool CommentReactionsEnabled,
     IReadOnlyDictionary<string, int> Reactions,
-    IReadOnlyList<string> MyReactions);
+    IReadOnlyList<string> MyReactions,
+    CrackmeStatus Status,
+    string? TakedownReason,
+    DateTime? TakenDownAt);
+
+// The uploader's view of their own submission — unlike the public detail it includes non-public
+// statuses (pending/rejected/taken-down) and the moderator's feedback, so they know where it stands.
+public sealed record MySubmission(
+    string Slug,
+    string Title,
+    CrackmeStatus Status,
+    string? ModeratorMessage,
+    bool IsTakenDown,
+    string? TakedownReason,
+    DateTime? TakenDownAt,
+    long DownloadCount,
+    int SolvedCount,
+    DateTime CreatedAt,
+    DateTime? PublishedAt);

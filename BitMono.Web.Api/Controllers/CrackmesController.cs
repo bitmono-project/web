@@ -58,14 +58,42 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         return new CrackmeListResponse(items, total, page, size);
     }
 
+    // The uploader's own submissions, including pending/rejected/taken-down ones the public can't see,
+    // plus the moderator's message so they know why something wasn't approved.
+    [HttpGet("mine")]
+    [Authorize]
+    public async Task<IReadOnlyList<MySubmission>> Mine(CancellationToken ct)
+    {
+        var uid = CurrentUserId();
+        if (uid is null)
+            return [];
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        return await db.Crackmes.AsNoTracking()
+            .Where(c => c.UploaderUserId == uid)
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => new MySubmission(
+                c.Slug, c.Title, c.Status, c.PublicModeratorMessage,
+                c.IsTakenDown, c.TakedownReason, c.TakenDownAt,
+                c.DownloadCount, c.SolvedCount, c.CreatedAt, c.PublishedAt))
+            .ToListAsync(ct);
+    }
+
     [HttpGet("{slug}")]
     public async Task<ActionResult<CrackmeDetail>> Detail(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
 
-        var c = await db.Crackmes.AsNoTracking().Where(Public).FirstOrDefaultAsync(x => x.Slug == slug, ct);
+        // Fetch without the Public filter so a taken-down crackme returns a tombstone (with the reason)
+        // instead of a bare 404. Pending/rejected stay hidden — the owner sees those via /api/crackmes/mine.
+        var c = await db.Crackmes.AsNoTracking().FirstOrDefaultAsync(x => x.Slug == slug, ct);
         if (c is null)
+            return NotFound();
+        if (c.IsTakenDown)
+            return Tombstone(c);
+        if (c.Status != CrackmeStatus.Approved)
             return NotFound();
 
         var uid = CurrentUserId();
@@ -415,7 +443,22 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         Avg(c.QualitySum, c.QualityCount), c.QualityCount,
         c.SizeBytes, c.OriginalFileName, c.DownloadCount, c.SolvedCount,
         c.IsBitMonoObfuscated, c.Preset, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt,
-        isOwner, c.ReactionsEnabled, c.CommentReactionsEnabled, reactions, myReactions);
+        isOwner, c.ReactionsEnabled, c.CommentReactionsEnabled, reactions, myReactions,
+        c.Status, c.TakedownReason, c.TakenDownAt);
+
+    // A stripped-down detail for a taken-down crackme: keep title/author so the page still means
+    // something, but drop description/download/reactions and surface the takedown reason.
+    private static CrackmeDetail Tombstone(Crackme c) => new(
+        c.Slug, c.Title, Description: null, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
+        c.TargetPlatform, c.DotnetRuntime, c.Language,
+        c.AuthorDifficulty, AvgDifficulty: null, DifficultyCount: 0,
+        AvgQuality: null, QualityCount: 0,
+        SizeBytes: 0, OriginalFileName: null, DownloadCount: c.DownloadCount, SolvedCount: c.SolvedCount,
+        IsBitMonoObfuscated: false, Preset: ObfuscationPreset.Custom, Protections: [],
+        PublishedAt: c.PublishedAt ?? c.CreatedAt, IsOwner: false,
+        ReactionsEnabled: false, CommentReactionsEnabled: false,
+        Reactions: new Dictionary<string, int>(), MyReactions: [],
+        Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt);
 
     private Guid? CurrentUserId() =>
         User.Identity?.IsAuthenticated == true && Guid.TryParse(User.FindFirstValue("uid"), out var id) ? id : null;
