@@ -279,12 +279,17 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             .ToListAsync(ct);
         int CountOf(CrackmeStatus s) => byStatus.FirstOrDefault(x => x.Status == s)?.Count ?? 0;
 
-        var byDay = await db.Crackmes.AsNoTracking()
+        // Npgsql can't translate GroupBy(c => c.CreatedAt.Date) — pull the raw timestamps for the
+        // small 14-day window and bucket them by day in memory.
+        var recent = await db.Crackmes.AsNoTracking()
             .Where(c => c.CreatedAt >= chartSince)
-            .GroupBy(c => c.CreatedAt.Date)
+            .Select(c => c.CreatedAt)
+            .ToListAsync(ct);
+        var byDay = recent
+            .GroupBy(d => d.Date)
             .Select(g => new StatPoint(g.Key, g.Count()))
             .OrderBy(p => p.Day)
-            .ToListAsync(ct);
+            .ToList();
 
         var top = await db.Crackmes.AsNoTracking()
             .OrderByDescending(c => c.DownloadCount)
