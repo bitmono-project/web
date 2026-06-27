@@ -37,6 +37,7 @@ export default function Upload() {
   const [accepted, setAccepted] = useState([false, false, false])
   const [reactionsEnabled, setReactionsEnabled] = useState(true)
   const [commentReactionsEnabled, setCommentReactionsEnabled] = useState(true)
+  const [fileName, setFileName] = useState('')
   const [phase, setPhase] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [error, setError] = useState('')
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null)
@@ -179,7 +180,12 @@ export default function Upload() {
 
         <div>
           <label className={label} htmlFor="File">File <span className="normal-case text-faint">(.dll / .exe / .zip, ≤ 10 MB)</span></label>
-          <input id="File" name="File" type="file" required accept=".dll,.exe,.zip" className={`${field} file:mr-3 file:rounded file:border-0 file:bg-line file:px-3 file:py-1 file:text-ink`} />
+          <label htmlFor="File" className="flex cursor-pointer items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 transition-colors hover:border-acid">
+            <span className="rounded bg-line px-3 py-1 font-mono text-[13px] text-ink">Choose file</span>
+            <span className="truncate font-mono text-[13px] text-faint">{fileName || 'no file chosen'}</span>
+          </label>
+          <input id="File" name="File" type="file" accept=".dll,.exe,.zip" className="sr-only"
+            onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')} />
         </div>
 
         <div className="space-y-2 rounded-lg border border-line bg-surface/30 p-4">

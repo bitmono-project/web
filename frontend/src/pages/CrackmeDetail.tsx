@@ -10,12 +10,16 @@ import {
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
 import { type Me, useAuth } from '../lib/auth'
+import { getConfig } from '../lib/config'
 
 export default function CrackmeDetail() {
   const { slug = '' } = useParams()
   const { me } = useAuth()
   const [c, setC] = useState<Detail | null>(null)
   const [state, setState] = useState<'loading' | 'ok' | 'missing' | 'error'>('loading')
+  const [zipPassword, setZipPassword] = useState('bitmono.dev')
+
+  useEffect(() => { getConfig().then((cfg) => setZipPassword(cfg.zipPassword)) }, [])
 
   useEffect(() => {
     let live = true
@@ -46,7 +50,7 @@ export default function CrackmeDetail() {
         </div>
         <div className="text-right">
           <a href={`/api/crackmes/${c.slug}/download`} className="btn-acid">download ↓</a>
-          <p className="mt-2 font-mono text-[11px] text-faint">zip password: <span className="text-muted">bitmono.dev</span></p>
+          <p className="mt-2 font-mono text-[11px] text-faint">zip password: <span className="text-muted">{zipPassword}</span></p>
         </div>
       </div>
 
@@ -96,7 +100,7 @@ export default function CrackmeDetail() {
       <ReportControl slug={c.slug} />
 
       <RatingsPanel slug={c.slug} me={me} initial={c} />
-      <WriteupsPanel slug={c.slug} me={me} />
+      <WriteupsPanel slug={c.slug} me={me} zipPassword={zipPassword} />
       <CommentsPanel slug={c.slug} me={me} commentReactionsEnabled={c.commentReactionsEnabled} />
       {c.isOwner && (
         <OwnerSettings
@@ -337,7 +341,7 @@ function CommentsPanel({ slug, me, commentReactionsEnabled }: { slug: string; me
   )
 }
 
-function WriteupsPanel({ slug, me }: { slug: string; me: Me | null }) {
+function WriteupsPanel({ slug, me, zipPassword }: { slug: string; me: Me | null; zipPassword: string }) {
   const [writeups, setWriteups] = useState<WriteupItem[]>([])
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [open, setOpen] = useState(false)
@@ -396,7 +400,7 @@ function WriteupsPanel({ slug, me }: { slug: string; me: Me | null }) {
                 <p className="mt-2 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{w.bodyMarkdown}</p>
                 {w.hasAttachment && (
                   <a href={writeupAttachmentUrl(slug, w.id)} className="mt-3 inline-block font-mono text-[12px] text-acid hover:underline">
-                    download attachment ↓ (zip password: bitmono.dev)
+                    download attachment ↓ (zip password: {zipPassword})
                   </a>
                 )}
               </>

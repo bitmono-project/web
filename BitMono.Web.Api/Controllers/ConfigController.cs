@@ -8,5 +8,5 @@ namespace BitMono.Web.Api.Controllers;
 public sealed class ConfigController(IConfiguration cfg) : ControllerBase
 {
     [HttpGet]
-    public AppConfigResponse Get() => new(cfg["Crackmes:Turnstile:SiteKey"]);
+    public AppConfigResponse Get() => new(cfg["Crackmes:Turnstile:SiteKey"], cfg["Crackmes:ZipPassword"] ?? "bitmono.dev");
 }

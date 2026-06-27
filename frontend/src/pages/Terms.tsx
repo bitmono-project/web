@@ -52,7 +52,7 @@ export default function Terms() {
 
       <Sec title="Downloads">
         <p>
-          Downloads are password-protected zips (password: bitmono.dev). Run crackmes only inside a
+          Downloads are password-protected zips (the password is shown on each crackme’s page). Run crackmes only inside a
           virtual machine — obfuscated binaries often trigger antivirus by design. You download and
           run them at your own risk.
         </p>
