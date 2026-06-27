@@ -103,7 +103,10 @@ export default function Upload() {
         Your crackme is in the review queue. A moderator approves every submission before it goes public —
         it’ll show up in the gallery once it’s through.
       </p>
-      <Link to="/crackmes" className="btn-acid mt-6 inline-flex">back to the gallery</Link>
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
+        <Link to="/submissions" className="btn-acid inline-flex">track its status →</Link>
+        <Link to="/crackmes" className="font-mono text-sm text-muted transition-colors hover:text-ink">back to the gallery</Link>
+      </div>
     </main>
   )
 

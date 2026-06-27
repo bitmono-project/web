@@ -6,10 +6,10 @@ import {
   getCrackme, getComments, postComment, getMyRating, rateCrackme,
   getWriteups, submitWriteup, writeupAttachmentUrl,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
-  REPORT_REASONS, reportCrackme,
+  REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
-import { type Me, useAuth } from '../lib/auth'
+import { type Me, isAdmin, useAuth } from '../lib/auth'
 import { getConfig } from '../lib/config'
 
 export default function CrackmeDetail() {
@@ -30,6 +30,9 @@ export default function CrackmeDetail() {
     return () => { live = false }
   }, [slug])
 
+  // Re-fetch after an admin action — takedown flips the page to the tombstone, restore flips it back.
+  const reload = () => getCrackme(slug).then((r) => setC(r)).catch(() => {})
+
   if (state === 'loading') return <Center>loading<span className="caret">_</span></Center>
   if (state === 'error') return <Center>couldn’t load this crackme.</Center>
   if (state === 'missing' || !c) return (
@@ -37,6 +40,8 @@ export default function CrackmeDetail() {
       not found. <Link to="/crackmes" className="text-acid hover:underline">back to the gallery</Link>
     </Center>
   )
+
+  if (c.status === 'takenDown') return <Tombstone c={c} canRestore={isAdmin(me)} onRestore={reload} />
 
   const diff = (c.avgDifficulty ?? difficultyNumber(c.authorDifficulty)).toFixed(1)
   return (
@@ -110,7 +115,67 @@ export default function CrackmeDetail() {
           onChange={(r, cr) => setC({ ...c, reactionsEnabled: r, commentReactionsEnabled: cr })}
         />
       )}
+      {isAdmin(me) && <AdminControls c={c} onChange={reload} />}
     </main>
+  )
+}
+
+// Shown instead of the full page when a crackme has been taken down — a public notice with the reason.
+function Tombstone({ c, canRestore, onRestore }: { c: Detail; canRestore: boolean; onRestore: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const restore = async () => {
+    setBusy(true)
+    const ok = await restoreCrackme(c.id)
+    setBusy(false)
+    if (ok) onRestore()
+  }
+  return (
+    <main className="mx-auto max-w-2xl px-6 py-20">
+      <Link to="/crackmes" className="font-mono text-xs text-faint transition-colors hover:text-muted">← all crackmes</Link>
+      <div className="mt-6 rounded-xl border border-red-400/40 bg-red-400/5 p-8 text-center">
+        <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-red-400">Taken down</div>
+        <h1 className="mt-3 font-display text-3xl font-bold text-ink">{c.title}</h1>
+        <p className="mt-1 font-mono text-sm text-muted">by {c.author}</p>
+        <p className="mt-6 font-mono text-sm leading-relaxed text-ink/80">
+          This crackme was removed by a moderator and is no longer available for download.
+        </p>
+        {c.takedownReason && (
+          <p className="mx-auto mt-4 max-w-md rounded-lg border border-red-400/30 bg-void/40 p-3 font-mono text-[13px] text-red-300">
+            Reason: {c.takedownReason}
+          </p>
+        )}
+        {c.takenDownAt && <p className="mt-3 font-mono text-[11px] text-faint">removed {formatDate(c.takenDownAt)}</p>}
+      </div>
+      {canRestore && (
+        <div className="mt-4 text-center">
+          <button onClick={restore} disabled={busy} className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-acid hover:text-acid disabled:opacity-50">
+            {busy ? '…' : 'restore this crackme'}
+          </button>
+        </div>
+      )}
+    </main>
+  )
+}
+
+// Admin-only takedown control on a live crackme (matches the existing reject flow's prompt UX).
+function AdminControls({ c, onChange }: { c: Detail; onChange: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const takedown = async () => {
+    const reason = window.prompt('Takedown reason (shown publicly on the crackme page):') ?? ''
+    if (!reason.trim()) return
+    setBusy(true)
+    const ok = await takedownCrackme(c.id, reason.trim())
+    setBusy(false)
+    if (ok) onChange()
+  }
+  return (
+    <div className="mt-10 rounded-lg border border-dashed border-red-400/40 bg-red-400/5 p-4">
+      <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-red-400/80">Admin</div>
+      <p className="mb-3 font-mono text-[12px] text-muted">Remove this crackme from the gallery. Visitors will see a takedown notice with your reason.</p>
+      <button onClick={takedown} disabled={busy} className="rounded-full border border-red-400/50 px-4 py-2 font-mono text-sm text-red-400 transition-colors hover:bg-red-400/10 disabled:opacity-50">
+        {busy ? '…' : 'take down'}
+      </button>
+    </div>
   )
 }
 

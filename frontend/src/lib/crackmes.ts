@@ -28,6 +28,7 @@ export interface CrackmeListResponse {
 }
 
 export interface CrackmeDetail {
+  id: string
   slug: string
   title: string
   description: string | null
@@ -53,6 +54,26 @@ export interface CrackmeDetail {
   commentReactionsEnabled: boolean
   reactions: Record<string, number>
   myReactions: string[]
+  status: string
+  takedownReason: string | null
+  takenDownAt: string | null
+}
+
+// Crackme lifecycle status (camelCased from the server enum).
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Draft', pending: 'Pending review', approved: 'Approved', rejected: 'Rejected', takenDown: 'Taken down',
+}
+export const statusLabel = (v: string): string => STATUS_LABEL[v] ?? v
+
+export function statusBadgeClass(status: string): string {
+  const base = 'rounded border px-1.5 py-px font-mono text-[11px] uppercase tracking-wider'
+  switch (status) {
+    case 'approved': return `${base} border-acid/40 text-acid`
+    case 'pending': return `${base} border-yellow-400/40 text-yellow-400`
+    case 'rejected': return `${base} border-red-400/40 text-red-400`
+    case 'takenDown': return `${base} border-orange-400/40 text-orange-400`
+    default: return `${base} border-line text-faint`
+  }
 }
 
 export interface CrackmeFilters {
@@ -123,6 +144,28 @@ export async function getCrackme(slug: string): Promise<CrackmeDetail | null> {
   return (await res.json()) as CrackmeDetail
 }
 
+// --- my submissions (the uploader's own view, including pending/rejected/taken-down) ---
+
+export interface MySubmission {
+  slug: string
+  title: string
+  status: string
+  moderatorMessage: string | null
+  isTakenDown: boolean
+  takedownReason: string | null
+  takenDownAt: string | null
+  downloadCount: number
+  solvedCount: number
+  createdAt: string
+  publishedAt: string | null
+}
+
+export async function getMySubmissions(): Promise<MySubmission[]> {
+  const res = await fetch('/api/crackmes/mine')
+  if (!res.ok) return []
+  return (await res.json()) as MySubmission[]
+}
+
 // --- moderation (moderator/admin only) ---
 
 export interface PendingItem {
@@ -163,6 +206,66 @@ export async function rejectCrackme(id: string, message: string): Promise<boolea
 }
 
 export const moderationFileUrl = (id: string): string => `/api/moderation/${id}/file`
+
+// --- takedown / restore + admin dashboard (admin only) ---
+
+export async function takedownCrackme(id: string, reason: string): Promise<boolean> {
+  const res = await fetch(`/api/moderation/${id}/takedown`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  })
+  return res.ok
+}
+
+export async function restoreCrackme(id: string): Promise<boolean> {
+  return (await fetch(`/api/moderation/${id}/restore`, { method: 'POST' })).ok
+}
+
+export interface ModerationStats {
+  totalCrackmes: number
+  pendingCrackmes: number
+  approvedCrackmes: number
+  rejectedCrackmes: number
+  takenDownCrackmes: number
+  pendingWriteups: number
+  openReports: number
+  users: number
+  totalDownloads: number
+  totalSolved: number
+  submissionsLast7Days: number
+  submissionsLast30Days: number
+  submissionsByDay: { day: string; count: number }[]
+  topDownloaded: { slug: string; title: string; downloadCount: number; status: string }[]
+}
+
+export async function getModerationStats(): Promise<ModerationStats | null> {
+  const res = await fetch('/api/moderation/stats')
+  if (!res.ok) return null
+  return (await res.json()) as ModerationStats
+}
+
+export interface AdminCrackmeRow {
+  id: string
+  slug: string
+  title: string
+  author: string
+  status: string
+  isTakenDown: boolean
+  takedownReason: string | null
+  downloadCount: number
+  createdAt: string
+  publishedAt: string | null
+}
+
+export async function getAdminCrackmes(q: string, status: string): Promise<AdminCrackmeRow[]> {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (status) params.set('status', status)
+  const res = await fetch(`/api/moderation/crackmes?${params.toString()}`)
+  if (!res.ok) return []
+  return (await res.json()) as AdminCrackmeRow[]
+}
 
 // --- comments + ratings ---
 

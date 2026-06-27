@@ -1,6 +1,6 @@
 import { Link, Outlet } from 'react-router-dom'
 import { getAppVersion } from '../lib/version'
-import { isModerator, useAuth } from '../lib/auth'
+import { isAdmin, isModerator, useAuth } from '../lib/auth'
 
 export function Layout() {
   return (
@@ -24,11 +24,13 @@ function Header() {
       <nav className="flex items-center gap-5 font-mono text-[13px] text-muted">
         <Link to="/#obfuscate" className="hidden transition-colors hover:text-ink sm:inline">Obfuscate</Link>
         <Link to="/crackmes" className="transition-colors hover:text-ink">Crackmes</Link>
-        {isModerator(me) && <Link to="/moderation" className="transition-colors hover:text-ink">Review</Link>}
+        {isModerator(me) && !isAdmin(me) && <Link to="/moderation" className="transition-colors hover:text-ink">Review</Link>}
+        {isAdmin(me) && <Link to="/admin" className="transition-colors hover:text-acid">Admin</Link>}
         <a href="https://docs.bitmono.dev" className="hidden transition-colors hover:text-ink sm:inline">Docs</a>
         {!loading && (me
           ? (
             <span className="flex items-center gap-3">
+              <Link to="/submissions" className="hidden transition-colors hover:text-ink sm:inline">submissions</Link>
               <Link to="/upload" className="text-ink transition-colors hover:text-acid">submit</Link>
               <span className="hidden text-faint sm:inline">{me.name}</span>
               <button onClick={signOut} className="rounded-full border border-line px-3 py-1.5 text-ink transition-colors hover:border-acid hover:text-acid">

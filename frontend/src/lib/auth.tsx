@@ -42,6 +42,7 @@ export async function logout(): Promise<void> {
 }
 
 export const isModerator = (me: Me | null): boolean => me?.role === 'Moderator' || me?.role === 'Admin'
+export const isAdmin = (me: Me | null): boolean => me?.role === 'Admin'
 
 interface AuthState {
   me: Me | null
