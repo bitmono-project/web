@@ -87,7 +87,7 @@ export function ObfuscatePanel() {
     } catch (e) {
       fail(e instanceof Error ? e.message : 'Something broke.')
     }
-  }, [file, selected])
+  }, [file, selected, agreed])   // agreed MUST be here — without it run() sends a stale agree=false
 
   const reset = () => {
     setPhase('idle')
