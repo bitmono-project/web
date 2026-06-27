@@ -12,7 +12,9 @@ const app = express();
 // so /protections, /version, and /obfuscate/* reach the API with the full path intact.
 app.use(createProxyMiddleware({
   target: apiUrl,
-  changeOrigin: true,
+  // Keep the original Host (bitmono.dev) instead of rewriting it to api:8430 — the API needs it
+  // (with X-Forwarded-Proto from Cloudflare) to build correct https://bitmono.dev OAuth redirect URIs.
+  changeOrigin: false,
   pathFilter: ['/api', '/obfuscate', '/version', '/protections'],
 }));
 app.use(express.static(path.join(__dirname, 'dist')));
