@@ -239,6 +239,35 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             Avg(crackme.QualitySum, crackme.QualityCount), crackme.QualityCount));
     }
 
+    [HttpPost("{slug}/report")]
+    [EnableRateLimiting("comment")]
+    public async Task<IActionResult> Report(string slug, [FromBody] ReportRequest req, CancellationToken ct)
+    {
+        if (!Enum.TryParse<ReportReason>(req.Reason, ignoreCase: true, out var reason))
+            return BadRequest("Unknown report reason.");
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var id = await PublicIdAsync(db, slug, ct);
+        if (id is null)
+            return NotFound();
+
+        db.Reports.Add(new Report
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ModeratableType.Crackme,
+            TargetId = id.Value,
+            CrackmeId = id.Value,
+            ReporterUserId = CurrentUserId(),
+            ReporterIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Reason = reason,
+            Details = req.Details is { Length: > 2000 } d ? d[..2000] : req.Details,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync(ct);
+        return Accepted();
+    }
+
     [HttpPatch("{slug}/settings")]
     [Authorize]
     public async Task<IActionResult> UpdateSettings(string slug, [FromBody] CrackmeSettingsRequest req, CancellationToken ct)

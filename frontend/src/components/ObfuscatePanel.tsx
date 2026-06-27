@@ -30,6 +30,7 @@ export function ObfuscatePanel() {
   const [catalog, setCatalog] = useState<ProtectionInfo[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [level, setLevel] = useState<string>(DEFAULT_LEVEL)
+  const [agreed, setAgreed] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -73,7 +74,7 @@ export function ObfuscatePanel() {
     setPhase('working')
     setError('')
     try {
-      const id = await startObfuscation(file, [...selected])
+      const id = await startObfuscation(file, [...selected], agreed)
       const status = await waitForResult(id)
       if (status === 'done') {
         setResult({ id, name: file.name })
@@ -135,7 +136,14 @@ export function ObfuscatePanel() {
             {phase === 'ready' && (
               <>
                 <ProtectionPicker catalog={catalog} selected={selected} level={level} onLevel={applyLevel} onToggle={toggle} />
-                <button onClick={run} disabled={selected.size === 0} className="btn-acid disabled:cursor-not-allowed disabled:opacity-40">
+                <label className="flex items-start gap-2 text-left font-mono text-[11px] leading-snug text-muted">
+                  <input type="checkbox" className="mt-0.5" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+                  <span>
+                    I own this assembly (or I’m authorized to obfuscate it) and it isn’t malware. I agree to the{' '}
+                    <a href="/terms" className="text-acid hover:underline">terms</a>.
+                  </span>
+                </label>
+                <button onClick={run} disabled={selected.size === 0 || !agreed} className="btn-acid disabled:cursor-not-allowed disabled:opacity-40">
                   obfuscate{selected.size > 0 ? ` · ${selected.size}` : ''} →
                 </button>
               </>

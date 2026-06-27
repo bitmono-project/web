@@ -306,3 +306,42 @@ export async function rejectWriteup(id: string): Promise<boolean> {
 }
 
 export const modWriteupAttachmentUrl = (id: string): string => `/api/moderation/writeups/${id}/attachment`
+
+// --- reports ---
+
+export const REPORT_REASONS = [
+  { value: 'Malware', label: 'Malware / harmful' },
+  { value: 'Stolen', label: 'Stolen / not original' },
+  { value: 'Broken', label: 'Broken / doesn’t run' },
+  { value: 'Spam', label: 'Spam' },
+  { value: 'Inappropriate', label: 'Inappropriate' },
+  { value: 'Other', label: 'Other' },
+]
+
+export interface PendingReport {
+  id: string
+  crackmeSlug: string
+  crackmeTitle: string
+  reason: string
+  details: string | null
+  reporter: string
+  createdAt: string
+}
+
+export async function reportCrackme(slug: string, reason: string, details: string): Promise<boolean> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/report`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason, details: details || null }),
+  })
+  return res.ok
+}
+
+export async function getReportQueue(): Promise<PendingReport[]> {
+  const res = await fetch('/api/moderation/reports')
+  if (!res.ok) throw new Error(`Failed to load reports (${res.status})`)
+  return (await res.json()) as PendingReport[]
+}
+
+export async function resolveReport(id: string): Promise<boolean> {
+  return (await fetch(`/api/moderation/reports/${id}/resolve`, { method: 'POST' })).ok
+}

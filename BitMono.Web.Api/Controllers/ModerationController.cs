@@ -130,6 +130,35 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
         return NoContent();
     }
 
+    [HttpGet("reports")]
+    public async Task<IReadOnlyList<PendingReport>> ReportQueue(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        return await db.Reports.AsNoTracking()
+            .Where(r => !r.IsResolved && r.CrackmeId != null)
+            .OrderBy(r => r.CreatedAt)
+            .Select(r => new PendingReport(
+                r.Id, r.Crackme!.Slug, r.Crackme.Title, r.Reason, r.Details,
+                r.ReporterIp ?? AppConstants.AnonymousHandle, r.CreatedAt))
+            .ToListAsync(ct);
+    }
+
+    [HttpPost("reports/{id:guid}/resolve")]
+    public async Task<IActionResult> ResolveReport(Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var r = await db.Reports.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (r is null)
+            return NotFound();
+        r.IsResolved = true;
+        r.ResolvedByUserId = Guid.Parse(User.FindFirstValue("uid")!);
+        r.ResolvedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
     private async Task<IActionResult> ActAsync(Guid id, bool approve, string? message, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();

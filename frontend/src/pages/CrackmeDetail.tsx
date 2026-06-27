@@ -6,6 +6,7 @@ import {
   getCrackme, getComments, postComment, getMyRating, rateCrackme,
   getWriteups, submitWriteup, writeupAttachmentUrl,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
+  REPORT_REASONS, reportCrackme,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
 import { type Me, useAuth } from '../lib/auth'
@@ -92,6 +93,8 @@ export default function CrackmeDetail() {
         ⚠ Run crackmes only inside a VM. Obfuscated binaries often trip antivirus by design — that’s expected, not malware.
       </p>
 
+      <ReportControl slug={c.slug} />
+
       <RatingsPanel slug={c.slug} me={me} initial={c} />
       <WriteupsPanel slug={c.slug} me={me} />
       <CommentsPanel slug={c.slug} me={me} commentReactionsEnabled={c.commentReactionsEnabled} />
@@ -104,6 +107,42 @@ export default function CrackmeDetail() {
         />
       )}
     </main>
+  )
+}
+
+function ReportControl({ slug }: { slug: string }) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState(REPORT_REASONS[0].value)
+  const [details, setDetails] = useState('')
+  const [phase, setPhase] = useState<'idle' | 'sending' | 'done'>('idle')
+
+  const send = async () => {
+    setPhase('sending')
+    const ok = await reportCrackme(slug, reason, details)
+    setPhase(ok ? 'done' : 'idle')
+    if (ok) setOpen(false)
+  }
+
+  if (phase === 'done')
+    return <p className="mt-3 font-mono text-[12px] text-faint">Thanks — a moderator will take a look.</p>
+
+  return (
+    <div className="mt-3">
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="font-mono text-[12px] text-faint transition-colors hover:text-red-400">⚑ report this crackme</button>
+      ) : (
+        <div className="rounded-lg border border-line bg-surface/30 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={reason} onChange={(e) => setReason(e.target.value)} className="rounded-lg border border-line bg-surface px-2 py-1.5 font-mono text-[12px] text-ink outline-none focus:border-acid">
+              {REPORT_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+            <button onClick={() => setOpen(false)} className="font-mono text-[12px] text-faint hover:text-muted">cancel</button>
+            <button onClick={send} disabled={phase === 'sending'} className="ml-auto rounded-full border border-line px-3 py-1.5 font-mono text-[12px] text-ink transition-colors hover:border-red-400 hover:text-red-400 disabled:opacity-50">submit report</button>
+          </div>
+          <input value={details} onChange={(e) => setDetails(e.target.value)} maxLength={2000} placeholder="optional details" className="mt-2 w-full rounded-lg border border-line bg-surface px-2 py-1.5 font-mono text-[12px] text-ink outline-none focus:border-acid" />
+        </div>
+      )}
+    </div>
   )
 }
 

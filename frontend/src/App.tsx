@@ -7,6 +7,8 @@ import CrackmeDetail from './pages/CrackmeDetail'
 import Upload from './pages/Upload'
 import Login from './pages/Login'
 import Moderation from './pages/Moderation'
+import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
 
 export default function App() {
   return (
@@ -20,6 +22,8 @@ export default function App() {
             <Route path="upload" element={<Upload />} />
             <Route path="login" element={<Login />} />
             <Route path="moderation" element={<Moderation />} />
+            <Route path="privacy" element={<Privacy />} />
+            <Route path="terms" element={<Terms />} />
           </Route>
         </Routes>
       </BrowserRouter>

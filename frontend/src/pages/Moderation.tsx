@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isModerator, useAuth } from '../lib/auth'
 import {
-  type PendingItem, type PendingWriteup,
+  type PendingItem, type PendingWriteup, type PendingReport,
   getQueue, approveCrackme, rejectCrackme, moderationFileUrl,
   getWriteupQueue, approveWriteup, rejectWriteup, modWriteupAttachmentUrl,
+  getReportQueue, resolveReport,
   platformLabel, languageLabel, difficultyLabel, formatSize, formatDate,
 } from '../lib/crackmes'
 
@@ -12,6 +13,7 @@ export default function Moderation() {
   const { me, loading } = useAuth()
   const [items, setItems] = useState<PendingItem[]>([])
   const [writeups, setWriteups] = useState<PendingWriteup[]>([])
+  const [reports, setReports] = useState<PendingReport[]>([])
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -19,7 +21,15 @@ export default function Moderation() {
     if (loading || !isModerator(me)) return
     getQueue().then((q) => { setItems(q); setState('ok') }).catch(() => setState('error'))
     getWriteupQueue().then(setWriteups).catch(() => {})
+    getReportQueue().then(setReports).catch(() => {})
   }, [loading, me])
+
+  const resolveOne = async (id: string) => {
+    setBusy(id)
+    const ok = await resolveReport(id)
+    setBusy(null)
+    if (ok) setReports((xs) => xs.filter((x) => x.id !== id))
+  }
 
   const actWriteup = async (id: string, approve: boolean) => {
     setBusy(id)
@@ -91,6 +101,29 @@ export default function Moderation() {
           </div>
         ))}
       </div>
+
+      {reports.length > 0 && (
+        <>
+          <h2 className="mt-12 font-display text-2xl font-bold text-ink">
+            Reports <span className="font-mono text-sm text-faint">({reports.length})</span>
+          </h2>
+          <div className="mt-4 space-y-3">
+            {reports.map((r) => (
+              <div key={r.id} className="rounded-xl border border-line bg-surface/30 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="font-mono text-[13px]">
+                    <span className="rounded border border-red-400/40 px-1.5 py-px text-[11px] uppercase text-red-400">{r.reason}</span>{' '}
+                    <Link to={`/challenge/${r.crackmeSlug}`} className="text-acid hover:underline">{r.crackmeTitle}</Link>
+                    <span className="ml-2 text-faint">{r.reporter} · {formatDate(r.createdAt)}</span>
+                  </div>
+                  <button onClick={() => resolveOne(r.id)} disabled={busy === r.id} className="rounded-full border border-line px-3 py-1.5 font-mono text-[12px] text-ink transition-colors hover:border-acid hover:text-acid disabled:opacity-50">resolve</button>
+                </div>
+                {r.details && <p className="mt-2 font-mono text-[12px] text-muted">{r.details}</p>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {writeups.length > 0 && (
         <>

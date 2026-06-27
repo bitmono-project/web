@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { devLogin, getProviders, loginUrl, useAuth, type Providers } from '../lib/auth'
+import { DiscordIcon, GitHubIcon } from '../components/Icons'
 
 export default function Login() {
   const [providers, setProviders] = useState<Providers>({ discord: false, github: false, dev: false })
@@ -22,16 +23,16 @@ export default function Login() {
         <a
           href={providers.discord ? loginUrl('discord', returnUrl) : undefined}
           aria-disabled={!providers.discord}
-          className={`flex items-center justify-center rounded-lg border border-line bg-surface px-4 py-3 font-mono text-sm transition-colors ${providers.discord ? 'text-ink hover:border-acid hover:text-acid' : 'cursor-not-allowed text-faint'}`}
+          className={`flex items-center justify-center gap-2.5 rounded-lg border border-line bg-surface px-4 py-3 font-mono text-sm transition-colors ${providers.discord ? 'text-ink hover:border-acid hover:text-acid' : 'cursor-not-allowed text-faint'}`}
         >
-          Continue with Discord{!providers.discord && ' · not configured'}
+          <DiscordIcon className="h-5 w-5" /> Continue with Discord{!providers.discord && ' · not configured'}
         </a>
         <a
           href={providers.github ? loginUrl('github', returnUrl) : undefined}
           aria-disabled={!providers.github}
-          className={`flex items-center justify-center rounded-lg border border-line bg-surface px-4 py-3 font-mono text-sm transition-colors ${providers.github ? 'text-ink hover:border-acid hover:text-acid' : 'cursor-not-allowed text-faint'}`}
+          className={`flex items-center justify-center gap-2.5 rounded-lg border border-line bg-surface px-4 py-3 font-mono text-sm transition-colors ${providers.github ? 'text-ink hover:border-acid hover:text-acid' : 'cursor-not-allowed text-faint'}`}
         >
-          Continue with GitHub{!providers.github && ' · not configured'}
+          <GitHubIcon className="h-5 w-5" /> Continue with GitHub{!providers.github && ' · not configured'}
         </a>
       </div>
 

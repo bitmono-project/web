@@ -32,10 +32,11 @@ export async function getEngineVersion(): Promise<string> {
   }
 }
 
-export async function startObfuscation(file: File, protections: string[]): Promise<string> {
+export async function startObfuscation(file: File, protections: string[], agree = true): Promise<string> {
   const form = new FormData()
   form.append('file', file)
   for (const p of protections) form.append('protections', p)
+  form.append('agree', String(agree))
   const res = await fetch('/obfuscate', { method: 'POST', body: form })
   if (res.status !== 202) {
     throw new Error((await res.text().catch(() => '')) || `Upload failed (${res.status})`)

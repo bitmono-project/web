@@ -51,7 +51,10 @@ function Footer() {
     <footer className="mx-auto max-w-6xl border-t border-line px-6 py-8 font-mono text-xs text-faint">
       <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
         <span>© bitmono — free &amp; open-source obfuscator for .NET &amp; Mono · web {getAppVersion()}</span>
-        <div className="flex gap-5">
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          <Link to="/privacy" className="transition-colors hover:text-ink">privacy</Link>
+          <Link to="/terms" className="transition-colors hover:text-ink">terms</Link>
+          <a href="mailto:hello@bitmono.dev" className="transition-colors hover:text-ink">contact</a>
           <a href="https://docs.bitmono.dev" className="transition-colors hover:text-ink">docs</a>
           <a href="https://github.com/sunnamed434/BitMono" className="transition-colors hover:text-ink">github</a>
           <a href="https://discord.gg/sFDHd47St4" className="transition-colors hover:text-ink">discord</a>

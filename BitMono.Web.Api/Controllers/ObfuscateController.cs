@@ -15,8 +15,10 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
 
     [HttpPost]
     [EnableRateLimiting("obfuscate")]
-    public async Task<IActionResult> Upload(IFormFile file, [FromForm] string[] protections, CancellationToken ct)
+    public async Task<IActionResult> Upload(IFormFile file, [FromForm] string[] protections, [FromForm] bool agree, CancellationToken ct)
     {
+        if (!agree)
+            return BadRequest("You must confirm the assembly is yours to obfuscate and isn't malware.");
         if (file is null || file.Length is 0 or > MaxUploadBytes)
             return BadRequest("File must be between 1 byte and 30 MB.");
         if (!file.FileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
