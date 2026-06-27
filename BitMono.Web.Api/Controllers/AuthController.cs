@@ -13,6 +13,7 @@ namespace BitMono.Web.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[ResponseCache(NoStore = true)]   // auth state (me/providers) must never be cached by the browser
 public sealed class AuthController(IWebHostEnvironment env, IAuthenticationSchemeProvider schemes) : ControllerBase
 {
     [HttpGet("me")]
