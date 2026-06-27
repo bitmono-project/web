@@ -5,6 +5,10 @@ using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.StackExchangeRedis;
+using StackExchange.Redis;
 
 namespace BitMono.Web.Api.Auth;
 
@@ -65,7 +69,31 @@ public static class AuthSetup
             o.AddPolicy(AdminPolicy, p => p.RequireRole(nameof(UserRole.Admin)));
         });
 
+        AddDataProtection(builder, cfg);
         builder.Services.AddScoped<UserService>();
+    }
+
+    // Auth cookies are encrypted with Data Protection keys. Left unconfigured, ASP.NET keeps the
+    // keyring in a container-local folder that's wiped on every redeploy — so each deploy generates
+    // fresh keys, old cookies no longer decrypt, and everyone is silently logged out. Persist the
+    // keyring to Redis (Aspire provisions it with a durable volume) so sessions survive deploys.
+    private static void AddDataProtection(WebApplicationBuilder builder, IConfiguration cfg)
+    {
+        var dp = builder.Services.AddDataProtection().SetApplicationName("bitmono");
+        if (!string.IsNullOrEmpty(cfg.GetConnectionString("redis")))
+        {
+            // Aspire Redis client integration: registers a shared IConnectionMultiplexer (with health
+            // checks + telemetry) from the "redis" reference wired in the AppHost. Persist the keyring
+            // there so it survives container redeploys.
+            builder.AddRedisClient("redis");
+            builder.Services.AddOptions<KeyManagementOptions>().Configure<IConnectionMultiplexer>((options, redis) =>
+                options.XmlRepository = new RedisXmlRepository(() => redis.GetDatabase(), "bitmono:dp-keys"));
+        }
+        else
+        {
+            // No Redis (running the API standalone without the AppHost): keep keys on disk so a restart doesn't log you out.
+            dp.PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".dpkeys")));
+        }
     }
 
     // After the provider hands us the external identity, find-or-create our account and stamp
