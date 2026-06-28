@@ -338,6 +338,7 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             .Take(100)
             .Select(c => new AdminCrackmeRow(
                 c.Id, c.Slug, c.Title, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
+                c.UploaderUserId == null ? null : db.Users.Where(u => u.Id == c.UploaderUserId).Select(u => u.Handle).FirstOrDefault(),
                 c.Status, c.IsTakenDown, c.TakedownReason, c.DownloadCount, c.CreatedAt, c.PublishedAt))
             .ToListAsync(ct);
     }

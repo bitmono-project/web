@@ -8,22 +8,34 @@ using BitMono.Web.Data.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace BitMono.Web.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
 [ResponseCache(NoStore = true)]   // auth state (me/providers) must never be cached by the browser
-public sealed class AuthController(IWebHostEnvironment env, IAuthenticationSchemeProvider schemes) : ControllerBase
+public sealed class AuthController(IWebHostEnvironment env, IAuthenticationSchemeProvider schemes, IServiceScopeFactory scopeFactory) : ControllerBase
 {
     [HttpGet("me")]
-    public ActionResult<MeResponse?> Me()
+    public async Task<ActionResult<MeResponse?>> Me(CancellationToken ct)
     {
         if (User.Identity?.IsAuthenticated != true)
             return Ok((MeResponse?)null);
+
+        // Handle (profile slug) isn't a claim — look it up by uid so the nav can link the name to /user/{handle}.
+        string? handle = null;
+        if (Guid.TryParse(User.FindFirstValue("uid"), out var uid))
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+            handle = await db.Users.AsNoTracking().Where(u => u.Id == uid).Select(u => u.Handle).FirstOrDefaultAsync(ct);
+        }
+
         return Ok(new MeResponse(
             User.FindFirstValue("uid") ?? "",
             User.Identity.Name ?? "user",
+            handle,
             User.FindFirstValue(ClaimTypes.Role) ?? nameof(UserRole.User),
             User.FindFirstValue("avatar")));
     }
@@ -71,7 +83,7 @@ public sealed class AuthController(IWebHostEnvironment env, IAuthenticationSchem
         var user = await users.FindOrCreateAsync("dev", handle, handle, null, null, role);
 
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, UserService.BuildPrincipal(user));
-        return new MeResponse(user.Id.ToString(), user.DisplayName, user.Role.ToString(), user.AvatarUrl);
+        return new MeResponse(user.Id.ToString(), user.DisplayName, user.Handle, user.Role.ToString(), user.AvatarUrl);
     }
 
     private string SafeReturn(string? url) => !string.IsNullOrEmpty(url) && Url.IsLocalUrl(url) ? url : "/";

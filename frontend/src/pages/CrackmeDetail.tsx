@@ -9,7 +9,7 @@ import {
   REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
   type ModerationEvent, getModerationHistory,
   markSolved, unmarkSolved, submitFlag, setVerification, VERIFICATION_KINDS,
-  platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
+  platformLabel, languageLabel, difficultyNumber, formatSize, formatDate, statusLabel,
 } from '../lib/crackmes'
 import { type Me, isAdmin, useAuth } from '../lib/auth'
 import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
@@ -50,6 +50,12 @@ export default function CrackmeDetail() {
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
       <Link to="/crackmes" className="font-mono text-xs text-faint transition-colors hover:text-muted">← all crackmes</Link>
+
+      {c.status !== 'approved' && (
+        <div className="mt-4 rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-4 py-2 font-mono text-[12px] text-yellow-300">
+          Preview — this submission is <span className="font-bold">{statusLabel(c.status)}</span> and isn’t public yet.
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>

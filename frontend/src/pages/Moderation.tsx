@@ -84,9 +84,14 @@ export default function Moderation() {
                   by {c.author} · {c.runtime ?? platformLabel(c.platform)} · {languageLabel(c.language)} · {difficultyLabel(c.difficulty)} · {formatSize(c.sizeBytes)} · {formatDate(c.createdAt)}
                 </p>
               </div>
-              <a href={moderationFileUrl(c.id)} className="rounded-full border border-line px-3 py-1.5 font-mono text-[12px] text-ink transition-colors hover:border-acid hover:text-acid">
-                download to inspect ↓
-              </a>
+              <div className="flex shrink-0 gap-2">
+                <Link to={`/challenge/${c.slug}`} target="_blank" rel="noopener" className="rounded-full border border-line px-3 py-1.5 font-mono text-[12px] text-ink transition-colors hover:border-acid hover:text-acid">
+                  preview ↗
+                </Link>
+                <a href={moderationFileUrl(c.id)} className="rounded-full border border-line px-3 py-1.5 font-mono text-[12px] text-ink transition-colors hover:border-acid hover:text-acid">
+                  download to inspect ↓
+                </a>
+              </div>
             </div>
 
             {c.description && <p className="mt-3 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/80">{c.description}</p>}

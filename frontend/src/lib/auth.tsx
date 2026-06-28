@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 
-export interface Me { id: string; name: string; role: string; avatar: string | null }
+export interface Me { id: string; name: string; handle: string | null; role: string; avatar: string | null }
 export interface Providers { discord: boolean; github: boolean; dev: boolean }
 
 export async function fetchMe(): Promise<Me | null> {

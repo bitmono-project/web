@@ -52,6 +52,7 @@ public sealed record AdminCrackmeRow(
     string Slug,
     string Title,
     string Author,
+    string? AuthorHandle,
     CrackmeStatus Status,
     bool IsTakenDown,
     string? TakedownReason,

@@ -36,7 +36,9 @@ function Header() {
               <Link to="/submissions" className="hidden transition-colors hover:text-ink sm:inline">submissions</Link>
               <Link to="/upload" className="text-ink transition-colors hover:text-acid">submit</Link>
               <NotificationBell />
-              <span className="hidden text-faint sm:inline">{me.name}</span>
+              {me.handle
+                ? <Link to={`/user/${me.handle}`} className="hidden text-faint transition-colors hover:text-acid sm:inline">{me.name}</Link>
+                : <span className="hidden text-faint sm:inline">{me.name}</span>}
               <button onClick={signOut} className="rounded-full border border-line px-3 py-1.5 text-ink transition-colors hover:border-acid hover:text-acid">
                 logout
               </button>

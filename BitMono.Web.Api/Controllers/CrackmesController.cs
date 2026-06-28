@@ -103,7 +103,10 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
                 : null;
             return Tombstone(c, takedownHandle);
         }
-        if (c.Status != CrackmeStatus.Approved)
+        // Moderators/admins can open a not-yet-approved (pending/rejected) crackme to preview the full page;
+        // the public still gets 404 for anything that isn't Approved.
+        var isStaff = User.IsInRole(nameof(UserRole.Moderator)) || User.IsInRole(nameof(UserRole.Admin));
+        if (c.Status != CrackmeStatus.Approved && !isStaff)
             return NotFound();
 
         var uid = CurrentUserId();

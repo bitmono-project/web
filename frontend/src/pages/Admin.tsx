@@ -185,7 +185,9 @@ function CrackmeManager() {
         {rows.map((r) => (
           <div key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-surface/30 p-3">
             <Link to={`/challenge/${r.slug}`} className="font-mono text-[13px] text-ink transition-colors hover:text-acid">{r.title}</Link>
-            <span className="font-mono text-[11px] text-faint">{r.author}</span>
+            {r.authorHandle
+              ? <Link to={`/user/${r.authorHandle}`} className="font-mono text-[11px] text-faint transition-colors hover:text-acid">{r.author}</Link>
+              : <span className="font-mono text-[11px] text-faint">{r.author}</span>}
             <span className={statusBadgeClass(r.status)}>{statusLabel(r.status)}</span>
             <span className="font-mono text-[11px] text-faint">{r.downloadCount.toLocaleString()} dl · {formatDate(r.createdAt)}</span>
             {r.isTakenDown ? (

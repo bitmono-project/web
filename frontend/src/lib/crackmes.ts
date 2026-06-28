@@ -398,6 +398,7 @@ export interface AdminCrackmeRow {
   slug: string
   title: string
   author: string
+  authorHandle: string | null
   status: string
   isTakenDown: boolean
   takedownReason: string | null
