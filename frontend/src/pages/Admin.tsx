@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isAdmin, useAuth } from '../lib/auth'
 import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
+import { tooltipBubble } from '../components/Tooltip'
 import {
   type ModerationStats, type AdminCrackmeRow, type AdminUserRow,
   getModerationStats, getAdminCrackmes, getAdminUsers, takedownCrackme, restoreCrackme,
@@ -98,11 +99,12 @@ function SubmissionsChart({ byDay }: { byDay: ModerationStats['submissionsByDay'
       <div className="mb-4 font-mono text-[11px] uppercase tracking-wider text-faint">Submissions · last 14 days</div>
       <div className="flex h-28 items-end gap-1">
         {days.map((d) => (
-          <div key={d.label} className="flex flex-1 flex-col items-center justify-end" title={`${d.label}: ${d.count}`}>
+          <div key={d.label} className="group relative flex flex-1 flex-col items-center justify-end">
             <div
-              className="w-full rounded-t bg-acid/70 transition-colors hover:bg-acid"
+              className="w-full rounded-t bg-acid/70 transition-colors group-hover:bg-acid"
               style={{ height: `${(d.count / max) * 100}%`, minHeight: d.count > 0 ? '3px' : '0' }}
             />
+            <span className={`absolute bottom-full left-1/2 mb-1 -translate-x-1/2 ${tooltipBubble} group-hover:opacity-100`}>{d.label}: {d.count}</span>
           </div>
         ))}
       </div>
