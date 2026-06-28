@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isModerator, useAuth } from '../lib/auth'
 import { PromptDialog, ConfirmDialog, REJECT_PRESETS } from '../components/PromptDialog'
+import { ImageGallery } from '../components/ImageGallery'
 import {
   type PendingItem, type PendingWriteup, type PendingReport,
   getQueue, approveCrackme, rejectCrackme, moderationFileUrl,
-  getWriteupQueue, approveWriteup, rejectWriteup, modWriteupAttachmentUrl,
+  getWriteupQueue, approveWriteup, rejectWriteup, modWriteupAttachmentUrl, modWriteupImageUrl,
   getReportQueue, resolveReport,
   platformLabel, languageLabel, difficultyLabel, formatSize, formatDate,
 } from '../lib/crackmes'
@@ -160,6 +161,7 @@ export default function Moderation() {
                   )}
                 </div>
                 <p className="mt-3 max-h-60 overflow-y-auto whitespace-pre-wrap rounded border border-line bg-void/40 p-3 font-mono text-[12px] leading-relaxed text-ink/80">{w.bodyMarkdown}</p>
+                {w.imageCount > 0 && <ImageGallery urls={Array.from({ length: w.imageCount }, (_, i) => modWriteupImageUrl(w.id, i))} />}
                 <div className="mt-4 flex gap-2">
                   <button onClick={() => actWriteup(w.id, true)} disabled={busy === w.id} className="btn-acid disabled:opacity-50">approve</button>
                   <button onClick={() => actWriteup(w.id, false)} disabled={busy === w.id} className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-red-400 hover:text-red-400 disabled:opacity-50">reject</button>

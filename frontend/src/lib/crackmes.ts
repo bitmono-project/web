@@ -532,6 +532,7 @@ export interface PendingWriteup {
   title: string | null
   bodyMarkdown: string
   hasAttachment: boolean
+  imageCount: number
   createdAt: string
 }
 
@@ -558,17 +559,21 @@ export async function pinWriteup(slug: string, id: string): Promise<boolean> {
   return (await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}/pin`, { method: 'POST' })).ok
 }
 
-export async function submitWriteup(slug: string, title: string, body: string, attachment: File | null): Promise<boolean> {
+export async function submitWriteup(slug: string, title: string, body: string, attachment: File | null, images: File[] = []): Promise<boolean> {
   const fd = new FormData()
   if (title.trim()) fd.set('Title', title.trim())
   fd.set('BodyMarkdown', body)
   if (attachment) fd.set('Attachment', attachment)
+  for (const img of images) fd.append('Images', img)
   const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups`, { method: 'POST', body: fd })
   return res.status === 202
 }
 
 export const writeupAttachmentUrl = (slug: string, id: string): string =>
   `/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}/attachment`
+
+export const writeupImageUrl = (slug: string, id: string, index: number): string =>
+  `/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}/images/${index}`
 
 export async function getWriteupQueue(): Promise<PendingWriteup[]> {
   const res = await fetch('/api/moderation/writeups')
@@ -585,6 +590,7 @@ export async function rejectWriteup(id: string): Promise<boolean> {
 }
 
 export const modWriteupAttachmentUrl = (id: string): string => `/api/moderation/writeups/${id}/attachment`
+export const modWriteupImageUrl = (id: string, index: number): string => `/api/moderation/writeups/${id}/images/${index}`
 
 // --- reports ---
 

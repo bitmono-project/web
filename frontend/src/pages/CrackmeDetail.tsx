@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   type CrackmeDetail as Detail, type CommentItem, type MyRating, type WriteupItem, type ReactionSummary,
   getCrackme, getComments, postComment, getMyRating, rateCrackme,
-  getWriteups, submitWriteup, writeupAttachmentUrl, toggleWriteupUpvote, toggleWriteupHelped, pinWriteup,
+  getWriteups, submitWriteup, writeupAttachmentUrl, writeupImageUrl, toggleWriteupUpvote, toggleWriteupHelped, pinWriteup,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
   REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
   type ModerationEvent, getModerationHistory,
@@ -13,6 +13,7 @@ import {
 } from '../lib/crackmes'
 import { type Me, isAdmin, useAuth } from '../lib/auth'
 import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
+import { ImageGallery } from '../components/ImageGallery'
 import { getConfig } from '../lib/config'
 import { useTitle } from '../lib/useTitle'
 
@@ -505,17 +506,26 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: M
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [images, setImages] = useState<{ file: File; url: string }[]>([])
   const [phase, setPhase] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
 
   const load = () => getWriteups(slug).then(setWriteups)
   useEffect(() => { load() }, [slug])
 
+  const addImages = (files: FileList | null) =>
+    setImages((cur) => [...cur, ...Array.from(files ?? []).map((file) => ({ file, url: URL.createObjectURL(file) }))].slice(0, 10))
+  const removeImage = (i: number) =>
+    setImages((cur) => { URL.revokeObjectURL(cur[i].url); return cur.filter((_, j) => j !== i) })
+
   const send = async () => {
     if (!body.trim()) return
     setPhase('sending')
-    const ok = await submitWriteup(slug, title, body.trim(), file)
+    const ok = await submitWriteup(slug, title, body.trim(), file, images.map((x) => x.file))
     setPhase(ok ? 'done' : 'error')
-    if (ok) { setTitle(''); setBody(''); setFile(null); setOpen(false) }
+    if (ok) {
+      images.forEach((x) => URL.revokeObjectURL(x.url))
+      setTitle(''); setBody(''); setFile(null); setImages([]); setOpen(false)
+    }
   }
 
   const patch = (id: string, p: Partial<WriteupItem>) =>
@@ -552,6 +562,20 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: M
             className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
             rows={8} maxLength={40000} placeholder="# How I cracked it&#10;..." value={body} onChange={(e) => setBody(e.target.value)}
           />
+          <div className="mt-2">
+            <span className="font-mono text-[11px] text-faint">screenshots (optional) — PNG/JPG/WEBP/GIF · up to 10 · 50 MB total</span>
+            <input type="file" accept="image/*" multiple onChange={(e) => { addImages(e.target.files); e.currentTarget.value = '' }} className="mt-1 block font-mono text-[12px] text-muted file:mr-2 file:rounded file:border-0 file:bg-line file:px-2 file:py-1 file:text-ink" />
+            {images.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {images.map((img, i) => (
+                  <div key={i} className="relative h-16 w-24 overflow-hidden rounded border border-line">
+                    <img src={img.url} alt="" className="h-full w-full object-cover" />
+                    <button type="button" onClick={() => removeImage(i)} aria-label="remove" className="absolute right-0.5 top-0.5 rounded bg-void/80 px-1 font-mono text-[11px] text-red-400 hover:text-red-300">✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="font-mono text-[12px] text-muted file:mr-2 file:rounded file:border-0 file:bg-line file:px-2 file:py-1 file:text-ink" />
             <button onClick={send} disabled={phase === 'sending' || !body.trim()} className="btn-acid ml-auto disabled:opacity-50">{phase === 'sending' ? '…' : 'submit for review'}</button>
@@ -571,6 +595,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: M
             {revealed.has(w.id) ? (
               <>
                 <p className="mt-2 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{w.bodyMarkdown}</p>
+                {w.imageCount > 0 && <ImageGallery urls={Array.from({ length: w.imageCount }, (_, i) => writeupImageUrl(slug, w.id, i))} />}
                 {w.hasAttachment && (
                   <a href={writeupAttachmentUrl(slug, w.id)} className="mt-3 inline-block font-mono text-[12px] text-acid hover:underline">
                     download attachment ↓ (zip password: {zipPassword})
