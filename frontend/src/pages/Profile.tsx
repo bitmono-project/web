@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { type UserProfile, type ProfileCrackme, getUserProfile, getUserCrackmes, difficultyLabel, formatDate } from '../lib/crackmes'
 import { RanksDialog } from '../components/RanksDialog'
+import { Tooltip } from '../components/Tooltip'
 import { useTitle } from '../lib/useTitle'
 
 export default function Profile() {
@@ -54,7 +55,7 @@ export default function Profile() {
           onClick={() => setRanksOpen(true)}
           className="rounded-xl border border-line bg-surface/30 p-4 text-center transition-colors hover:border-acid/40"
         >
-          <div className="truncate font-display text-base font-bold text-acid" title={profile.rankName}>{profile.rankName}</div>
+          <div className="truncate font-display text-base font-bold text-acid">{profile.rankName}</div>
           <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-faint">Rank ↗</div>
         </button>
         <StatCard label="Solved" value={String(profile.solves)} />
@@ -68,9 +69,11 @@ export default function Profile() {
       {profile.badges.length > 0 && (
         <div className="mt-6 flex flex-wrap gap-2">
           {profile.badges.map((b) => (
-            <span key={b.code} title={b.description} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[12px] ${badgeClass(b.rarity)}`}>
-              <span aria-hidden>●</span> {b.name}
-            </span>
+            <Tooltip key={b.code} label={b.description}>
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[12px] ${badgeClass(b.rarity)}`}>
+                <span aria-hidden>●</span> {b.name}
+              </span>
+            </Tooltip>
           ))}
         </div>
       )}
@@ -102,11 +105,11 @@ function badgeClass(rarity: string): string {
   }
 }
 
-// Defensive truncate + title so an unexpectedly long value never blows out the fixed-width card.
+// Defensive truncate so an unexpectedly long value never blows out the fixed-width card.
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-surface/30 p-4 text-center">
-      <div className="truncate font-display text-2xl font-bold text-ink" title={value}>{value}</div>
+      <div className="truncate font-display text-2xl font-bold text-ink">{value}</div>
       <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-faint">{label}</div>
     </div>
   )

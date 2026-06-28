@@ -11,6 +11,7 @@ public sealed class CrackmeQuery
     public int? MinDifficulty { get; set; }
     public int? MaxDifficulty { get; set; }
     public string? Protection { get; set; }
+    public bool? BitMonoOnly { get; set; }
     public string? Sort { get; set; } // date (default) | downloads | difficulty
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 30;

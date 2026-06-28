@@ -15,6 +15,7 @@ import { type Me, isAdmin, isModerator, useAuth } from '../lib/auth'
 import { PromptDialog, ConfirmDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
 import { ImageGallery } from '../components/ImageGallery'
 import { Turnstile } from '../components/Turnstile'
+import { Tooltip } from '../components/Tooltip'
 import { getConfig } from '../lib/config'
 import { useTitle } from '../lib/useTitle'
 
@@ -439,6 +440,9 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
   const [captcha, setCaptcha] = useState<string | null>(null)
   const [tsKey, setTsKey] = useState(0)
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
+  const [confirmHide, setConfirmHide] = useState<string | null>(null)
+  const [confirmLock, setConfirmLock] = useState(false)
+  const [commenting, setCommenting] = useState(false)
   const [locked, setLocked] = useState(commentsLocked)
   const isMod = isModerator(me)
 
@@ -457,7 +461,8 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
   }
 
   const hide = async (id: string) => {
-    if (await hideComment(id)) setComments((xs) => xs.filter((x) => x.id !== id))
+    const r = await hideComment(id)
+    if (r !== null) setComments((xs) => xs.map((x) => (x.id === id ? { ...x, isHidden: r } : x)))
   }
   const toggleLock = async () => {
     const r = await setCommentsLock(crackmeId)
@@ -490,13 +495,13 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
     <div className="mt-10">
       <div className="mb-3 flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-wider text-faint">Comments ({comments.length}){locked && <span className="ml-2 normal-case text-faint">· 🔒 locked</span>}</span>
-        {isMod && <button onClick={toggleLock} className="font-mono text-[12px] text-faint transition-colors hover:text-acid">{locked ? 'unlock comments' : 'lock comments'}</button>}
+        {isMod && <button onClick={() => (locked ? toggleLock() : setConfirmLock(true))} className="font-mono text-[12px] text-faint transition-colors hover:text-acid">{locked ? 'unlock comments' : 'lock comments'}</button>}
       </div>
 
       <div className="space-y-3">
         {comments.length === 0 && <p className="font-mono text-[13px] text-faint">No comments yet.</p>}
         {comments.map((cm) => (
-          <div key={cm.id} className="rounded-lg border border-line bg-surface/30 p-3">
+          <div key={cm.id} className={`rounded-lg border border-line bg-surface/30 p-3 ${cm.isHidden ? 'opacity-60' : ''}`}>
             {cm.isDeleted ? (
               <p className="font-mono text-[12px] italic text-faint">// comment deleted by its author</p>
             ) : (
@@ -504,11 +509,13 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
                 <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-faint">
                   <span>{cm.authorHandle
                     ? <Link to={`/user/${cm.authorHandle}`} className="transition-colors hover:text-acid">{cm.author}</Link>
-                    : cm.author} · {formatDate(cm.createdAt)}{cm.edited && <button onClick={() => showHistory(cm.id)} className="ml-1 transition-colors hover:text-acid">· edited</button>}</span>
+                    : cm.author} · {formatDate(cm.createdAt)}{cm.edited && <button onClick={() => showHistory(cm.id)} className="ml-1 transition-colors hover:text-acid">· edited</button>}{cm.isHidden && <span className="ml-1 text-orange-400">· hidden</span>}</span>
                   <span className="flex gap-2">
                     {cm.mine && editing !== cm.id && <button onClick={() => startEdit(cm)} className="transition-colors hover:text-acid">edit</button>}
                     {cm.mine && <button onClick={() => setConfirmDel(cm.id)} className="transition-colors hover:text-red-400">delete</button>}
-                    {isMod && <button onClick={() => hide(cm.id)} title="hide comment" className="transition-colors hover:text-red-400">hide</button>}
+                    {isMod && (cm.isHidden
+                      ? <Tooltip label="unhide comment"><button onClick={() => hide(cm.id)} className="transition-colors hover:text-acid">unhide</button></Tooltip>
+                      : <Tooltip label="hide comment"><button onClick={() => setConfirmHide(cm.id)} className="transition-colors hover:text-red-400">hide</button></Tooltip>)}
                   </span>
                 </div>
                 {editing === cm.id ? (
@@ -519,7 +526,7 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
                       <label className="flex items-center gap-2 font-mono text-[12px] text-muted">
                         <input type="checkbox" checked={editSpoiler} onChange={(e) => setEditSpoiler(e.target.checked)} /> spoiler
                       </label>
-                      <button onClick={() => setEditing(null)} className="font-mono text-[12px] text-faint hover:text-ink">cancel</button>
+                      <button onClick={() => setEditing(null)} className="rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-acid hover:text-acid">cancel</button>
                       <button onClick={() => saveEdit(cm.id)} disabled={!editBody.trim()} className="btn-acid ml-auto px-3 py-1 text-[12px] disabled:opacity-50">save</button>
                     </div>
                   </div>
@@ -560,8 +567,9 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
             placeholder="Stay polite — don’t spoil the solution (or mark it as a spoiler)."
             value={body}
             onChange={(e) => setBody(e.target.value)}
+            onFocus={() => setCommenting(true)}
           />
-          {turnstileSiteKey && <Turnstile key={tsKey} siteKey={turnstileSiteKey} onToken={setCaptcha} />}
+          {turnstileSiteKey && commenting && <Turnstile key={tsKey} siteKey={turnstileSiteKey} onToken={setCaptcha} />}
           <div className="mt-2 flex items-center gap-3">
             <label className="flex items-center gap-2 font-mono text-[12px] text-muted">
               <input type="checkbox" checked={isSpoiler} onChange={(e) => setIsSpoiler(e.target.checked)} /> mark as spoiler
@@ -585,6 +593,28 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
           onCancel={() => setConfirmDel(null)}
         />
       )}
+
+      {confirmHide && (
+        <ConfirmDialog
+          title="Hide comment"
+          message="This removes the comment from the public thread (reversible). The author isn't notified."
+          confirmText="hide"
+          danger
+          onConfirm={() => { hide(confirmHide); setConfirmHide(null) }}
+          onCancel={() => setConfirmHide(null)}
+        />
+      )}
+
+      {confirmLock && (
+        <ConfirmDialog
+          title="Lock comments"
+          message="New comments will be blocked until you unlock. Existing comments stay visible."
+          confirmText="lock"
+          danger
+          onConfirm={() => { toggleLock(); setConfirmLock(false) }}
+          onCancel={() => setConfirmLock(false)}
+        />
+      )}
     </div>
   )
 }
@@ -601,6 +631,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
   const [wCaptcha, setWCaptcha] = useState<string | null>(null)
   const [wTsKey, setWTsKey] = useState(0)
   const [confirmDelW, setConfirmDelW] = useState<string | null>(null)
+  const [confirmPin, setConfirmPin] = useState<string | null>(null)
 
   const load = () => getWriteups(slug).then(setWriteups)
   useEffect(() => { load() }, [slug])
@@ -632,8 +663,8 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
     const r = await toggleWriteupHelped(slug, w.id)
     if (r) patch(w.id, { helpedCount: r.helpedCount, myHelped: r.helped })
   }
-  const pin = async (w: WriteupItem) => {
-    if (await pinWriteup(slug, w.id)) load() // pin reorders + clears the previous pick — re-fetch
+  const pin = async (id: string) => {
+    if (await pinWriteup(slug, id)) load() // pin reorders + clears the previous pick — re-fetch
   }
 
   const [wEditing, setWEditing] = useState<string | null>(null)
@@ -708,7 +739,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
                 <textarea value={wBody} onChange={(e) => setWBody(e.target.value)} rows={8} maxLength={40000}
                   className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid" />
                 <div className="mt-1 flex gap-3">
-                  <button onClick={() => setWEditing(null)} className="font-mono text-[12px] text-faint hover:text-ink">cancel</button>
+                  <button onClick={() => setWEditing(null)} className="rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-acid hover:text-acid">cancel</button>
                   <button onClick={() => saveWEdit(w.id)} disabled={!wBody.trim()} className="btn-acid ml-auto px-3 py-1 text-[12px] disabled:opacity-50">save</button>
                 </div>
               </div>
@@ -729,32 +760,34 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
             )}
 
             <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[12px]">
-              <button
-                onClick={() => upvote(w)}
-                disabled={!me || w.mine}
-                title={w.mine ? 'your writeup' : !me ? 'sign in to upvote' : 'upvote'}
-                className={`rounded-full border px-2.5 py-1 transition-colors ${w.myUpvoted ? 'border-acid bg-acid/15 text-acid' : 'border-line text-muted'} ${me && !w.mine ? 'hover:border-acid hover:text-acid' : 'cursor-not-allowed opacity-60'}`}
-              >
-                ▲ {w.upvoteCount}
-              </button>
+              <Tooltip label={w.mine ? 'your writeup' : !me ? 'sign in to upvote' : 'upvote'}>
+                <button
+                  onClick={() => upvote(w)}
+                  disabled={!me || w.mine}
+                  className={`rounded-full border px-2.5 py-1 transition-colors ${w.myUpvoted ? 'border-acid bg-acid/15 text-acid' : 'border-line text-muted'} ${me && !w.mine ? 'hover:border-acid hover:text-acid' : 'cursor-not-allowed opacity-60'}`}
+                >
+                  ▲ {w.upvoteCount}
+                </button>
+              </Tooltip>
 
               {w.canMarkHelped ? (
-                <button
-                  onClick={() => markHelped(w)}
-                  title="You solved this — vouch that this writeup helped"
-                  className={`rounded-full border px-2.5 py-1 transition-colors ${w.myHelped ? 'border-acid bg-acid/15 text-acid' : 'border-line text-muted hover:border-acid hover:text-acid'}`}
-                >
-                  ✓ helped{w.helpedCount > 0 && ` · ${w.helpedCount}`}
-                </button>
+                <Tooltip label="You solved this — vouch that this writeup helped">
+                  <button
+                    onClick={() => markHelped(w)}
+                    className={`rounded-full border px-2.5 py-1 transition-colors ${w.myHelped ? 'border-acid bg-acid/15 text-acid' : 'border-line text-muted hover:border-acid hover:text-acid'}`}
+                  >
+                    ✓ helped{w.helpedCount > 0 && ` · ${w.helpedCount}`}
+                  </button>
+                </Tooltip>
               ) : w.helpedCount > 0 && (
-                <span className="rounded-full border border-line px-2.5 py-1 text-faint" title="solvers who said this helped">✓ {w.helpedCount} helped</span>
+                <Tooltip label="solvers who said this helped"><span className="rounded-full border border-line px-2.5 py-1 text-faint">✓ {w.helpedCount} helped</span></Tooltip>
               )}
 
               {w.mine && wEditing !== w.id && <button onClick={() => startWEdit(w)} className="rounded-full border border-line px-2.5 py-1 text-muted transition-colors hover:border-acid hover:text-acid">edit</button>}
               {w.mine && <button onClick={() => setConfirmDelW(w.id)} className="rounded-full border border-line px-2.5 py-1 text-faint transition-colors hover:border-red-400 hover:text-red-400">delete</button>}
               {isOwner && (
                 <button
-                  onClick={() => pin(w)}
+                  onClick={() => (w.isAuthorPick ? pin(w.id) : setConfirmPin(w.id))}
                   className={`ml-auto rounded-full border px-2.5 py-1 transition-colors ${w.isAuthorPick ? 'border-acid text-acid' : 'border-line text-faint hover:border-acid hover:text-acid'}`}
                 >
                   {w.isAuthorPick ? 'unpin' : 'pin as intended'}
@@ -777,6 +810,16 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
           danger
           onConfirm={() => { delW(confirmDelW); setConfirmDelW(null) }}
           onCancel={() => setConfirmDelW(null)}
+        />
+      )}
+
+      {confirmPin && (
+        <ConfirmDialog
+          title="Pin as intended solution"
+          message="Marks this as the author's intended solution and floats it to the top (replaces any current pick)."
+          confirmText="pin"
+          onConfirm={() => { pin(confirmPin); setConfirmPin(null) }}
+          onCancel={() => setConfirmPin(null)}
         />
       )}
     </div>

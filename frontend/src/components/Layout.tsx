@@ -5,6 +5,7 @@ import { isAdmin, isModerator, useAuth } from '../lib/auth'
 import { getUnreadCount } from '../lib/notifications'
 import { useT } from '../lib/i18n'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { Tooltip } from './Tooltip'
 
 export function Layout() {
   return (
@@ -93,16 +94,18 @@ function NotificationBell() {
     return () => { live = false; clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [])
   return (
-    <Link to="/notifications" className="relative text-muted transition-colors hover:text-acid" title={t('nav.notifications')} aria-label={t('nav.notifications')}>
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-        <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-      </svg>
-      {unread > 0 && (
-        <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-acid px-1 text-[10px] font-bold text-void">
-          {unread > 9 ? '9+' : unread}
-        </span>
-      )}
-    </Link>
+    <Tooltip label={t('nav.notifications')} placement="bottom">
+      <Link to="/notifications" className="relative text-muted transition-colors hover:text-acid" aria-label={t('nav.notifications')}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+        </svg>
+        {unread > 0 && (
+          <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-acid px-1 text-[10px] font-bold text-void">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </Link>
+    </Tooltip>
   )
 }

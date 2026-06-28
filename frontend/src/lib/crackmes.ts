@@ -90,6 +90,7 @@ export interface CrackmeFilters {
   minDifficulty?: number
   maxDifficulty?: number
   protection?: string
+  bitMonoOnly?: boolean
   sort?: string
   page?: number
 }
@@ -143,6 +144,7 @@ export async function listCrackmes(f: CrackmeFilters): Promise<CrackmeListRespon
   if (f.minDifficulty) params.set('minDifficulty', String(f.minDifficulty))
   if (f.maxDifficulty) params.set('maxDifficulty', String(f.maxDifficulty))
   if (f.protection) params.set('protection', f.protection)
+  if (f.bitMonoOnly) params.set('bitMonoOnly', 'true')
   if (f.sort) params.set('sort', f.sort)
   if (f.page && f.page > 1) params.set('page', String(f.page))
   const res = await fetch(`/api/crackmes?${params.toString()}`)
@@ -431,6 +433,7 @@ export interface CommentItem {
   body: string
   isSpoiler: boolean
   isDeleted: boolean
+  isHidden: boolean
   edited: boolean
   mine: boolean
   createdAt: string
@@ -469,8 +472,10 @@ export async function updateCrackmeSettings(slug: string, reactionsEnabled: bool
 }
 
 // Moderator: hide a comment (toggle) and lock/unlock new comments on a crackme.
-export async function hideComment(id: string): Promise<boolean> {
-  return (await fetch(`/api/moderation/comments/${id}/hide`, { method: 'POST' })).ok
+// Toggles Comment.IsHidden; returns the new hidden state (or null on failure).
+export async function hideComment(id: string): Promise<boolean | null> {
+  const res = await fetch(`/api/moderation/comments/${id}/hide`, { method: 'POST' })
+  return res.ok ? ((await res.json()) as { isHidden: boolean }).isHidden : null
 }
 export async function setCommentsLock(crackmeId: string): Promise<boolean | null> {
   const res = await fetch(`/api/moderation/${crackmeId}/comments-lock`, { method: 'POST' })

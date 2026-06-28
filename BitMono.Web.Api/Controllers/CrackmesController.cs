@@ -40,6 +40,8 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             query = query.Where(c => (int)c.AuthorDifficulty <= max);
         if (!string.IsNullOrWhiteSpace(q.Protection))
             query = query.Where(c => c.ProtectionsApplied.Any(p => p.Name == q.Protection));
+        if (q.BitMonoOnly == true)
+            query = query.Where(c => c.IsBitMonoObfuscated);
 
         var total = await query.CountAsync(ct);
 
@@ -325,10 +327,12 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (id is null)
             return NotFound();
 
+        // Moderators see hidden comments too (so they can unhide); everyone else only the visible ones.
+        var isMod = User.IsInRole(nameof(UserRole.Moderator)) || User.IsInRole(nameof(UserRole.Admin));
         var rows = await db.Comments.AsNoTracking()
-            .Where(c => c.CrackmeId == id && !c.IsHidden)
+            .Where(c => c.CrackmeId == id && (isMod || !c.IsHidden))
             .OrderBy(c => c.CreatedAt)
-            .Select(c => new CommentRow(c.Id, c.AnonymousHandle, c.AuthorUserId, c.Body, c.IsSpoiler, c.IsDeleted, c.CreatedAt, c.UpdatedAt))
+            .Select(c => new CommentRow(c.Id, c.AnonymousHandle, c.AuthorUserId, c.Body, c.IsSpoiler, c.IsDeleted, c.IsHidden, c.CreatedAt, c.UpdatedAt))
             .ToListAsync(ct);
 
         var ids = rows.Select(r => r.Id).ToList();
@@ -353,7 +357,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             var handle = r.AuthorUserId is { } au && handles.TryGetValue(au, out var h) ? h : null;
             var mine = uid is not null && r.AuthorUserId == uid;
             return new CommentItem(r.Id, r.Author ?? AppConstants.AnonymousHandle, handle,
-                r.IsDeleted ? "" : r.Body, !r.IsDeleted && r.IsSpoiler, r.IsDeleted, r.UpdatedAt != r.CreatedAt, mine,
+                r.IsDeleted ? "" : r.Body, !r.IsDeleted && r.IsSpoiler, r.IsDeleted, r.IsHidden, r.UpdatedAt != r.CreatedAt, mine,
                 r.CreatedAt, counts, myReactions);
         }).ToList();
         return Ok(items);
@@ -403,7 +407,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         catch { }
         var authorHandle = await db.Users.AsNoTracking()
             .Where(u => u.Id == comment.AuthorUserId).Select(u => u.Handle).FirstOrDefaultAsync(ct);
-        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, authorHandle, comment.Body, comment.IsSpoiler, false, false, true, comment.CreatedAt,
+        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, authorHandle, comment.Body, comment.IsSpoiler, false, false, false, true, comment.CreatedAt,
             new Dictionary<string, int>(), []));
     }
 
