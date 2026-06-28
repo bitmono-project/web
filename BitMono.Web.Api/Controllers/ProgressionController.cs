@@ -74,7 +74,7 @@ public sealed class ProgressionController(IServiceScopeFactory scopeFactory) : C
 
     [HttpGet("my-rank")]
     [Authorize]
-    public async Task<ActionResult<MyRankResponse>> MyRank(CancellationToken ct)
+    public async Task<IActionResult> MyRank(CancellationToken ct)
     {
         await using var s = scopeFactory.CreateAsyncScope();
         var db = s.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -90,8 +90,8 @@ public sealed class ProgressionController(IServiceScopeFactory scopeFactory) : C
             : (int?)null;
         var next = Ranks.Next(u.Points);
 
-        return new MyRankResponse(
+        return Ok(new MyRankResponse(
             u.Points, solves, Ranks.For(u.Points).Name,
-            next?.Name, next is null ? null : next.MinPoints - u.Points, position);
+            next?.Name, next is null ? null : next.MinPoints - u.Points, position));
     }
 }

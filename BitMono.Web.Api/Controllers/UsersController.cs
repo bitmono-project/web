@@ -11,7 +11,7 @@ namespace BitMono.Web.Api.Controllers;
 public sealed class UsersController(IServiceScopeFactory scopeFactory) : ControllerBase
 {
     [HttpGet("{handle}")]
-    public async Task<ActionResult<UserProfile>> Profile(string handle, CancellationToken ct)
+    public async Task<IActionResult> Profile(string handle, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -38,9 +38,9 @@ public sealed class UsersController(IServiceScopeFactory scopeFactory) : Control
             .Select(x => new ProfileBadge(x.Code, x.Name, x.Description, x.Rarity, x.AwardedAt))
             .ToListAsync(ct);
 
-        return new UserProfile(
+        return Ok(new UserProfile(
             u.Handle!, u.DisplayName, u.AvatarUrl, u.Role.ToString(), u.CreatedAt,
-            u.Points, Ranks.For(u.Points).Name, position, solves, authored, writeups, badges);
+            u.Points, Ranks.For(u.Points).Name, position, solves, authored, writeups, badges));
     }
 
     [HttpGet("{handle}/crackmes")]

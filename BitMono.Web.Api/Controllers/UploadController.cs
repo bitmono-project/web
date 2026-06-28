@@ -26,7 +26,7 @@ public sealed class UploadController(
 {
     [HttpPost]
     [EnableRateLimiting("upload")]
-    public async Task<ActionResult<UploadResponse>> Submit([FromForm] UploadForm form, CancellationToken ct)
+    public async Task<IActionResult> Submit([FromForm] UploadForm form, CancellationToken ct)
     {
         // Cloudflare Turnstile — Turnstile injects "cf-turnstile-response" into the form. No-op if unset.
         var captchaToken = Request.Form["cf-turnstile-response"].ToString();

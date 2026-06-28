@@ -18,7 +18,7 @@ namespace BitMono.Web.Api.Controllers;
 public sealed class AuthController(IWebHostEnvironment env, IAuthenticationSchemeProvider schemes, IServiceScopeFactory scopeFactory) : ControllerBase
 {
     [HttpGet("me")]
-    public async Task<ActionResult<MeResponse?>> Me(CancellationToken ct)
+    public async Task<IActionResult> Me(CancellationToken ct)
     {
         if (User.Identity?.IsAuthenticated != true)
             return Ok((MeResponse?)null);
@@ -73,7 +73,7 @@ public sealed class AuthController(IWebHostEnvironment env, IAuthenticationSchem
 
     // Dev-only shortcut so the full upload→moderate→download loop is testable without OAuth apps.
     [HttpPost("dev-login")]
-    public async Task<ActionResult<MeResponse>> DevLogin([FromBody] DevLoginRequest req, [FromServices] UserService users)
+    public async Task<IActionResult> DevLogin([FromBody] DevLoginRequest req, [FromServices] UserService users)
     {
         if (!env.IsDevelopment())
             return NotFound();
@@ -83,7 +83,7 @@ public sealed class AuthController(IWebHostEnvironment env, IAuthenticationSchem
         var user = await users.FindOrCreateAsync("dev", handle, handle, null, null, role);
 
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, UserService.BuildPrincipal(user));
-        return new MeResponse(user.Id.ToString(), user.DisplayName, user.Handle, user.Role.ToString(), user.AvatarUrl);
+        return Ok(new MeResponse(user.Id.ToString(), user.DisplayName, user.Handle, user.Role.ToString(), user.AvatarUrl));
     }
 
     private string SafeReturn(string? url) => !string.IsNullOrEmpty(url) && Url.IsLocalUrl(url) ? url : "/";

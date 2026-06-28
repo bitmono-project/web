@@ -86,7 +86,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     }
 
     [HttpGet("{slug}")]
-    public async Task<ActionResult<CrackmeDetail>> Detail(string slug, CancellationToken ct)
+    public async Task<IActionResult> Detail(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -101,7 +101,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             var takedownHandle = c.UploaderUserId is { } downUp
                 ? await db.Users.AsNoTracking().Where(u => u.Id == downUp).Select(u => u.Handle).FirstOrDefaultAsync(ct)
                 : null;
-            return Tombstone(c, takedownHandle);
+            return Ok(Tombstone(c, takedownHandle));
         }
         // Moderators/admins can open a not-yet-approved (pending/rejected) crackme to preview the full page;
         // the public still gets 404 for anything that isn't Approved.
@@ -120,13 +120,13 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             ? await db.Users.AsNoTracking().Where(u => u.Id == up).Select(u => u.Handle).FirstOrDefaultAsync(ct)
             : null;
 
-        return ToDetail(c, isOwner: uid is not null && uid == c.UploaderUserId, counts, mine, solvedByMe, authorHandle);
+        return Ok(ToDetail(c, isOwner: uid is not null && uid == c.UploaderUserId, counts, mine, solvedByMe, authorHandle));
     }
 
     // Public takedown/restore trail for a crackme — visible to everyone so removals/restores are transparent.
     // The acting moderator's real name is revealed only to admins; everyone else sees "a moderator".
     [HttpGet("{slug}/moderation-history")]
-    public async Task<ActionResult<IReadOnlyList<ModerationEvent>>> ModerationHistory(string slug, CancellationToken ct)
+    public async Task<IActionResult> ModerationHistory(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -165,7 +165,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     [HttpPost("{slug}/solve")]
     [Authorize]
     [EnableRateLimiting("comment")]
-    public async Task<ActionResult<SolveResult>> Solve(string slug, CancellationToken ct)
+    public async Task<IActionResult> Solve(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -187,7 +187,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     [HttpDelete("{slug}/solve")]
     [Authorize]
     [EnableRateLimiting("comment")]
-    public async Task<ActionResult<SolveResult>> Unsolve(string slug, CancellationToken ct)
+    public async Task<IActionResult> Unsolve(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -257,7 +257,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     [HttpPost("{slug}/submit-flag")]
     [Authorize]
     [EnableRateLimiting("comment")]
-    public async Task<ActionResult<FlagResult>> SubmitFlag(string slug, [FromBody] FlagSubmitRequest req, CancellationToken ct)
+    public async Task<IActionResult> SubmitFlag(string slug, [FromBody] FlagSubmitRequest req, CancellationToken ct)
     {
         var answer = req.Answer?.Trim();
         if (string.IsNullOrEmpty(answer))
@@ -334,7 +334,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     }
 
     [HttpGet("{slug}/comments")]
-    public async Task<ActionResult<IReadOnlyList<CommentItem>>> Comments(string slug, CancellationToken ct)
+    public async Task<IActionResult> Comments(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -369,7 +369,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     [HttpPost("{slug}/comments")]
     [Authorize]
     [EnableRateLimiting("comment")]
-    public async Task<ActionResult<CommentItem>> AddComment(string slug, [FromBody] CommentCreateRequest req, CancellationToken ct)
+    public async Task<IActionResult> AddComment(string slug, [FromBody] CommentCreateRequest req, CancellationToken ct)
     {
         var body = req.Body?.Trim();
         if (string.IsNullOrEmpty(body))
@@ -410,7 +410,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
 
     [HttpGet("{slug}/my-rating")]
     [Authorize]
-    public async Task<ActionResult<MyRating>> GetMyRating(string slug, CancellationToken ct)
+    public async Task<IActionResult> GetMyRating(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -425,7 +425,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
 
     [HttpPost("{slug}/rate")]
     [Authorize]
-    public async Task<ActionResult<RatingResult>> Rate(string slug, [FromBody] RatingRequest req, CancellationToken ct)
+    public async Task<IActionResult> Rate(string slug, [FromBody] RatingRequest req, CancellationToken ct)
     {
         if (req.Difficulty is < 1 or > 6 || req.Quality is < 1 or > 6)
             return BadRequest("Difficulty and quality must be 1–6.");
@@ -523,7 +523,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     }
 
     [HttpGet("{slug}/writeups")]
-    public async Task<ActionResult<IReadOnlyList<WriteupItem>>> Writeups(string slug, CancellationToken ct)
+    public async Task<IActionResult> Writeups(string slug, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -542,7 +542,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
     [HttpPost("{slug}/writeups")]
     [Authorize]
     [EnableRateLimiting("upload")]
-    public async Task<ActionResult<WriteupResponse>> AddWriteup(string slug, [FromForm] WriteupForm form, CancellationToken ct)
+    public async Task<IActionResult> AddWriteup(string slug, [FromForm] WriteupForm form, CancellationToken ct)
     {
         var body = form.BodyMarkdown?.Trim();
         if (string.IsNullOrEmpty(body))

@@ -15,7 +15,7 @@ namespace BitMono.Web.Api.Controllers;
 public sealed class ReactionsController(IServiceScopeFactory scopeFactory) : ControllerBase
 {
     [HttpPost("crackme/{slug}/toggle")]
-    public async Task<ActionResult<ReactionSummary>> ToggleCrackme(string slug, [FromBody] ReactionToggleRequest req, CancellationToken ct)
+    public async Task<IActionResult> ToggleCrackme(string slug, [FromBody] ReactionToggleRequest req, CancellationToken ct)
     {
         if (!ReactionEmojis.IsValid(req.Emoji))
             return BadRequest("Unknown reaction.");
@@ -31,11 +31,12 @@ public sealed class ReactionsController(IServiceScopeFactory scopeFactory) : Con
         if (!c.ReactionsEnabled)
             return BadRequest("Reactions are turned off for this crackme.");
 
-        return await ToggleAsync(db, ModeratableType.Crackme, c.Id, req.Emoji, singlePerUser: false, ct);
+        // One reaction per user per crackme — a different emoji replaces the previous one.
+        return Ok(await ToggleAsync(db, ModeratableType.Crackme, c.Id, req.Emoji, singlePerUser: true, ct));
     }
 
     [HttpPost("comment/{commentId:guid}/toggle")]
-    public async Task<ActionResult<ReactionSummary>> ToggleComment(Guid commentId, [FromBody] ReactionToggleRequest req, CancellationToken ct)
+    public async Task<IActionResult> ToggleComment(Guid commentId, [FromBody] ReactionToggleRequest req, CancellationToken ct)
     {
         if (!ReactionEmojis.IsValid(req.Emoji))
             return BadRequest("Unknown reaction.");
@@ -53,7 +54,7 @@ public sealed class ReactionsController(IServiceScopeFactory scopeFactory) : Con
             return BadRequest("Comment reactions are turned off for this crackme.");
 
         // One reaction per user per comment — a different emoji replaces the previous one.
-        return await ToggleAsync(db, ModeratableType.Comment, commentId, req.Emoji, singlePerUser: true, ct);
+        return Ok(await ToggleAsync(db, ModeratableType.Comment, commentId, req.Emoji, singlePerUser: true, ct));
     }
 
     private async Task<ReactionSummary> ToggleAsync(

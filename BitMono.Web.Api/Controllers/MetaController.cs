@@ -8,16 +8,20 @@ namespace BitMono.Web.Api.Controllers;
 public sealed class MetaController(IHttpClientFactory factory) : ControllerBase
 {
     [HttpGet("version")]
-    public async Task<ActionResult<VersionResponse>> Version(CancellationToken ct)
+    public async Task<IActionResult> Version(CancellationToken ct)
     {
         var result = await factory.CreateClient("obfuscation").GetFromJsonAsync<VersionResponse>("/version", ct);
-        return result is null ? StatusCode(StatusCodes.Status502BadGateway) : result;
+        if (result is null)
+            return StatusCode(StatusCodes.Status502BadGateway);
+        return Ok(result);
     }
 
     [HttpGet("protections")]
-    public async Task<ActionResult<ProtectionInfo[]>> Protections(CancellationToken ct)
+    public async Task<IActionResult> Protections(CancellationToken ct)
     {
         var result = await factory.CreateClient("obfuscation").GetFromJsonAsync<ProtectionInfo[]>("/protections", ct);
-        return result is null ? StatusCode(StatusCodes.Status502BadGateway) : result;
+        if (result is null)
+            return StatusCode(StatusCodes.Status502BadGateway);
+        return Ok(result);
     }
 }
