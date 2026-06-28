@@ -14,6 +14,7 @@ import {
 import { type Me, isAdmin, isModerator, useAuth } from '../lib/auth'
 import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
 import { ImageGallery } from '../components/ImageGallery'
+import { Turnstile } from '../components/Turnstile'
 import { getConfig } from '../lib/config'
 import { useTitle } from '../lib/useTitle'
 
@@ -23,8 +24,9 @@ export default function CrackmeDetail() {
   const [c, setC] = useState<Detail | null>(null)
   const [state, setState] = useState<'loading' | 'ok' | 'missing' | 'error'>('loading')
   const [zipPassword, setZipPassword] = useState('bitmono.dev')
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null)
 
-  useEffect(() => { getConfig().then((cfg) => setZipPassword(cfg.zipPassword)) }, [])
+  useEffect(() => { getConfig().then((cfg) => { setZipPassword(cfg.zipPassword); setTurnstileSiteKey(cfg.turnstileSiteKey) }) }, [])
 
   useEffect(() => {
     let live = true
@@ -127,8 +129,8 @@ export default function CrackmeDetail() {
       <ModerationHistory slug={c.slug} />
 
       <RatingsPanel slug={c.slug} me={me} initial={c} />
-      <WriteupsPanel slug={c.slug} me={me} isOwner={c.isOwner} zipPassword={zipPassword} />
-      <CommentsPanel slug={c.slug} crackmeId={c.id} me={me} commentReactionsEnabled={c.commentReactionsEnabled} commentsLocked={c.commentsLocked} />
+      <WriteupsPanel slug={c.slug} me={me} isOwner={c.isOwner} zipPassword={zipPassword} turnstileSiteKey={turnstileSiteKey} />
+      <CommentsPanel slug={c.slug} crackmeId={c.id} me={me} commentReactionsEnabled={c.commentReactionsEnabled} commentsLocked={c.commentsLocked} turnstileSiteKey={turnstileSiteKey} />
       {c.isOwner && (
         <>
           <OwnerSettings
@@ -428,12 +430,14 @@ function Scale({ label, value, avg, count, disabled, onPick }: {
   )
 }
 
-function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsLocked }: { slug: string; crackmeId: string; me: Me | null; commentReactionsEnabled: boolean; commentsLocked: boolean }) {
+function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsLocked, turnstileSiteKey }: { slug: string; crackmeId: string; me: Me | null; commentReactionsEnabled: boolean; commentsLocked: boolean; turnstileSiteKey: string | null }) {
   const [comments, setComments] = useState<CommentItem[]>([])
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [body, setBody] = useState('')
   const [isSpoiler, setIsSpoiler] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [captcha, setCaptcha] = useState<string | null>(null)
+  const [tsKey, setTsKey] = useState(0)
   const [locked, setLocked] = useState(commentsLocked)
   const isMod = isModerator(me)
 
@@ -442,11 +446,12 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
   const send = async () => {
     if (!body.trim()) return
     setBusy(true)
-    const added = await postComment(slug, body.trim(), isSpoiler)
+    const added = await postComment(slug, body.trim(), isSpoiler, captcha)
     setBusy(false)
     if (added) {
       setComments((xs) => [...xs, added])
       setBody(''); setIsSpoiler(false)
+      setCaptcha(null); setTsKey((k) => k + 1)
     }
   }
 
@@ -555,11 +560,12 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
             value={body}
             onChange={(e) => setBody(e.target.value)}
           />
+          {turnstileSiteKey && <Turnstile key={tsKey} siteKey={turnstileSiteKey} onToken={setCaptcha} />}
           <div className="mt-2 flex items-center gap-3">
             <label className="flex items-center gap-2 font-mono text-[12px] text-muted">
               <input type="checkbox" checked={isSpoiler} onChange={(e) => setIsSpoiler(e.target.checked)} /> mark as spoiler
             </label>
-            <button onClick={send} disabled={busy || !body.trim()} className="btn-acid ml-auto disabled:opacity-50">{busy ? '…' : 'comment'}</button>
+            <button onClick={send} disabled={busy || !body.trim() || (!!turnstileSiteKey && !captcha)} className="btn-acid ml-auto disabled:opacity-50">{busy ? '…' : 'comment'}</button>
           </div>
         </div>
       ) : (
@@ -571,7 +577,7 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
   )
 }
 
-function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: Me | null; isOwner: boolean; zipPassword: string }) {
+function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { slug: string; me: Me | null; isOwner: boolean; zipPassword: string; turnstileSiteKey: string | null }) {
   const [writeups, setWriteups] = useState<WriteupItem[]>([])
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [open, setOpen] = useState(false)
@@ -580,6 +586,8 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: M
   const [file, setFile] = useState<File | null>(null)
   const [images, setImages] = useState<{ file: File; url: string }[]>([])
   const [phase, setPhase] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
+  const [wCaptcha, setWCaptcha] = useState<string | null>(null)
+  const [wTsKey, setWTsKey] = useState(0)
 
   const load = () => getWriteups(slug).then(setWriteups)
   useEffect(() => { load() }, [slug])
@@ -592,11 +600,12 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: M
   const send = async () => {
     if (!body.trim()) return
     setPhase('sending')
-    const ok = await submitWriteup(slug, title, body.trim(), file, images.map((x) => x.file))
+    const ok = await submitWriteup(slug, title, body.trim(), file, images.map((x) => x.file), wCaptcha)
     setPhase(ok ? 'done' : 'error')
     if (ok) {
       images.forEach((x) => URL.revokeObjectURL(x.url))
       setTitle(''); setBody(''); setFile(null); setImages([]); setOpen(false)
+      setWCaptcha(null); setWTsKey((k) => k + 1)
     }
   }
 
@@ -662,9 +671,10 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: M
               </div>
             )}
           </div>
+          {turnstileSiteKey && <Turnstile key={wTsKey} siteKey={turnstileSiteKey} onToken={setWCaptcha} />}
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="font-mono text-[12px] text-muted file:mr-2 file:rounded file:border-0 file:bg-line file:px-2 file:py-1 file:text-ink" />
-            <button onClick={send} disabled={phase === 'sending' || !body.trim()} className="btn-acid ml-auto disabled:opacity-50">{phase === 'sending' ? '…' : 'submit for review'}</button>
+            <button onClick={send} disabled={phase === 'sending' || !body.trim() || (!!turnstileSiteKey && !wCaptcha)} className="btn-acid ml-auto disabled:opacity-50">{phase === 'sending' ? '…' : 'submit for review'}</button>
           </div>
           {phase === 'error' && <p className="mt-2 font-mono text-xs text-red-400">Submission failed — try again.</p>}
         </div>

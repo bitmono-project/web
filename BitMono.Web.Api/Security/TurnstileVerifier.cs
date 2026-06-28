@@ -7,6 +7,8 @@ namespace BitMono.Web.Api.Security;
 public sealed class TurnstileVerifier(IHttpClientFactory httpFactory, IConfiguration cfg)
 {
     private const string VerifyUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+    // Hidden form field the Turnstile widget injects with the solved token.
+    public const string FormField = "cf-turnstile-response";
 
     public async Task<bool> VerifyAsync(string? token, string? ip, CancellationToken ct = default)
     {

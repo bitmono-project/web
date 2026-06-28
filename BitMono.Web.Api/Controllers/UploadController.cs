@@ -30,7 +30,7 @@ public sealed class UploadController(
     public async Task<IActionResult> Submit([FromForm] UploadForm form, CancellationToken ct)
     {
         // Cloudflare Turnstile — Turnstile injects "cf-turnstile-response" into the form. No-op if unset.
-        var captchaToken = Request.Form["cf-turnstile-response"].ToString();
+        var captchaToken = Request.Form[TurnstileVerifier.FormField].ToString();
         if (!await turnstile.VerifyAsync(captchaToken, HttpContext.GetClientIp(), ct))
             return BadRequest("Captcha check failed — please try again.");
 

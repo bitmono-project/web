@@ -6,6 +6,7 @@ using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Notifications;
 using BitMono.Web.Api.Progression;
+using BitMono.Web.Api.Security;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Api.Verification;
 using BitMono.Web.Data;
@@ -19,7 +20,7 @@ namespace BitMono.Web.Api.Controllers;
 
 [ApiController]
 [Route("api/crackmes")]
-public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobStorage storage, IConfiguration cfg) : ControllerBase
+public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobStorage storage, IConfiguration cfg, TurnstileVerifier turnstile) : ControllerBase
 {
     [HttpGet]
     public async Task<CrackmeListResponse> List([FromQuery] CrackmeQuery q, CancellationToken ct)
@@ -368,6 +369,8 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             return BadRequest("Comment can't be empty.");
         if (body.Length > 4000)
             body = body[..4000];
+        if (!await turnstile.VerifyAsync(req.CaptchaToken, HttpContext.GetClientIp(), ct))
+            return BadRequest("Captcha check failed — please try again.");
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
@@ -740,6 +743,8 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             return BadRequest("Writeup body is required.");
         if (body.Length > 40000)
             body = body[..40000];
+        if (!await turnstile.VerifyAsync(Request.Form[TurnstileVerifier.FormField].ToString(), HttpContext.GetClientIp(), ct))
+            return BadRequest("Captcha check failed — please try again.");
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();

@@ -1,5 +1,8 @@
 // Gallery API + display helpers. Enum values arrive camelCased (server uses JsonStringEnumConverter).
 
+// Cloudflare Turnstile form-field name — keep in sync with TurnstileVerifier.FormField on the server.
+const TURNSTILE_FIELD = 'cf-turnstile-response'
+
 export interface CrackmeListItem {
   slug: string
   title: string
@@ -492,11 +495,11 @@ export async function getComments(slug: string): Promise<CommentItem[]> {
   return (await res.json()) as CommentItem[]
 }
 
-export async function postComment(slug: string, body: string, isSpoiler: boolean): Promise<CommentItem | null> {
+export async function postComment(slug: string, body: string, isSpoiler: boolean, captchaToken?: string | null): Promise<CommentItem | null> {
   const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ body, isSpoiler }),
+    body: JSON.stringify({ body, isSpoiler, captchaToken }),
   })
   if (!res.ok) return null
   return (await res.json()) as CommentItem
@@ -597,12 +600,13 @@ export async function deleteWriteup(slug: string, id: string): Promise<boolean> 
   return (await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}`, { method: 'DELETE' })).ok
 }
 
-export async function submitWriteup(slug: string, title: string, body: string, attachment: File | null, images: File[] = []): Promise<boolean> {
+export async function submitWriteup(slug: string, title: string, body: string, attachment: File | null, images: File[] = [], captchaToken?: string | null): Promise<boolean> {
   const fd = new FormData()
   if (title.trim()) fd.set('Title', title.trim())
   fd.set('BodyMarkdown', body)
   if (attachment) fd.set('Attachment', attachment)
   for (const img of images) fd.append('Images', img)
+  if (captchaToken) fd.set(TURNSTILE_FIELD, captchaToken)
   const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups`, { method: 'POST', body: fd })
   return res.status === 202
 }
