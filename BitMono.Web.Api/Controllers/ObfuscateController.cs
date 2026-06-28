@@ -11,7 +11,21 @@ namespace BitMono.Web.Api.Controllers;
 [Route("obfuscate")]
 public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jobs) : ControllerBase
 {
-    private const long MaxUploadBytes = 100 * 1024 * 1024; // chunked upload assembles it under CF's per-request cap
+    private const long Mb = 1024 * 1024;
+    private const long MaxUploadBytes = 100 * Mb; // chunked upload assembles it under CF's per-request cap
+    private const long MaxDependenciesBytes = 100 * Mb; // total across all dependency assemblies
+    private const long MaxSigningKeyBytes = 64 * 1024; // .snk keys are ~1 KB; this is generous headroom
+
+    private const string DllExtension = ".dll";
+    private const string ExeExtension = ".exe";
+    private const string SnkExtension = ".snk";
+
+    private static bool IsAcceptedAssembly(string fileName) =>
+        fileName.EndsWith(DllExtension, StringComparison.OrdinalIgnoreCase) ||
+        fileName.EndsWith(ExeExtension, StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasExtension(string fileName, string extension) =>
+        fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase);
 
     [HttpPost]
     [EnableRateLimiting("obfuscate")]
@@ -20,10 +34,9 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
         if (!agree)
             return BadRequest("You must confirm the assembly is yours to obfuscate and isn't malware.");
         if (file is null || file.Length is 0 or > MaxUploadBytes)
-            return BadRequest("File must be between 1 byte and 30 MB.");
-        if (!file.FileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
-            !file.FileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            return BadRequest("Only .dll/.exe assemblies are accepted.");
+            return BadRequest($"File must be between 1 byte and {MaxUploadBytes / Mb} MB.");
+        if (!IsAcceptedAssembly(file.FileName))
+            return BadRequest($"Only {DllExtension}/{ExeExtension} assemblies are accepted.");
 
         var selected = protections ?? [];
 
@@ -32,7 +45,8 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
             await store.SaveInputAsync(id, stream, ct);
 
         // Protections are validated/defaulted by the obfuscation-service (single source of truth).
-        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, file.FileName, selected, CancellationToken.None));
+        // Legacy single-shot path: no dependencies or signing key (the chunked finalize carries those).
+        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, file.FileName, selected, Array.Empty<Guid>(), (Guid?)null, CancellationToken.None));
         return Accepted($"/obfuscate/{id}", new ObfuscateAcceptedResponse(id));
     }
 
@@ -42,34 +56,77 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
     public async Task<IActionResult> UploadChunk(Guid id, CancellationToken ct)
     {
         if (store.InputSize(id) >= MaxUploadBytes)
-            return BadRequest($"Upload exceeds {MaxUploadBytes / (1024 * 1024)} MB.");
+            return BadRequest($"Upload exceeds {MaxUploadBytes / Mb} MB.");
         await store.AppendInputAsync(id, Request.Body, ct);
         if (store.InputSize(id) > MaxUploadBytes)
         {
             store.DeleteInput(id);
-            return BadRequest($"Upload exceeds {MaxUploadBytes / (1024 * 1024)} MB.");
+            return BadRequest($"Upload exceeds {MaxUploadBytes / Mb} MB.");
         }
         return NoContent();
     }
 
+    // Dependencies are chunk-uploaded under their own ids; the client lists those ids here. The
+    // signing key is tiny, so it rides inline in this finalize form rather than a chunk stream.
     [HttpPost("chunks/{id:guid}/finalize")]
     [EnableRateLimiting("obfuscate")]
-    public IActionResult Finalize(Guid id, [FromForm] string fileName, [FromForm] string[] protections, [FromForm] bool agree)
+    public async Task<IActionResult> Finalize(
+        Guid id,
+        [FromForm] string fileName,
+        [FromForm] string[] protections,
+        [FromForm] bool agree,
+        [FromForm] Guid[] dependencyIds,
+        IFormFile? signingKey,
+        CancellationToken ct)
     {
+        var depIds = dependencyIds ?? [];
+        void Cleanup()
+        {
+            store.DeleteInput(id);
+            foreach (var depId in depIds)
+                store.DeleteInput(depId);
+        }
+
         if (!agree)
             return BadRequest("You must confirm the assembly is yours to obfuscate and isn't malware.");
         var size = store.InputSize(id);
         if (size is 0 or > MaxUploadBytes)
-            return BadRequest($"File must be between 1 byte and {MaxUploadBytes / (1024 * 1024)} MB.");
-        if (!fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
-            !fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            return BadRequest($"File must be between 1 byte and {MaxUploadBytes / Mb} MB.");
+        if (!IsAcceptedAssembly(fileName))
         {
-            store.DeleteInput(id);
-            return BadRequest("Only .dll/.exe assemblies are accepted.");
+            Cleanup();
+            return BadRequest($"Only {DllExtension}/{ExeExtension} assemblies are accepted.");
+        }
+
+        // Keep only the dependencies that actually arrived and bound the total — they're auxiliary,
+        // so a missing one isn't fatal (BitMono resolves references best-effort).
+        var deps = depIds.Where(depId => store.InputSize(depId) > 0).ToArray();
+        if (deps.Sum(store.InputSize) > MaxDependenciesBytes)
+        {
+            Cleanup();
+            return BadRequest($"Dependencies must total under {MaxDependenciesBytes / Mb} MB.");
+        }
+
+        Guid? keyId = null;
+        if (signingKey is { Length: > 0 })
+        {
+            if (!HasExtension(signingKey.FileName, SnkExtension))
+            {
+                Cleanup();
+                return BadRequest($"The signing key must be a {SnkExtension} strong-name key file.");
+            }
+            if (signingKey.Length > MaxSigningKeyBytes)
+            {
+                Cleanup();
+                return BadRequest($"The signing key must be under {MaxSigningKeyBytes / 1024} KB.");
+            }
+            keyId = Guid.NewGuid();
+            await using var keyStream = signingKey.OpenReadStream();
+            await store.SaveInputAsync(keyId.Value, keyStream, ct);
         }
 
         var selected = protections ?? [];
-        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, fileName, selected, CancellationToken.None));
+        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, fileName, selected, deps, keyId, CancellationToken.None));
         return Accepted($"/obfuscate/{id}", new ObfuscateAcceptedResponse(id));
     }
 

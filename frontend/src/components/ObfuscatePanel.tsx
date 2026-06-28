@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { startObfuscation, waitForResult, downloadUrl, getProtections, type ProtectionInfo } from '../lib/api'
+import { parseAssemblyRefs, missingRefs } from '../lib/peRefs'
 
 type Phase = 'idle' | 'ready' | 'working' | 'done' | 'error'
+
+const MAX_DEPS_BYTES = 100 * 1024 * 1024 // total across attached dependencies (mirrors the API cap)
+const isAssembly = (name: string) => /\.(dll|exe)$/i.test(name)
+const formatSize = (bytes: number): string =>
+  bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
 
 // Cumulative strength ladder (ConfuserEx-style): picking a level enables every protection whose
 // minLevel is at or below it. Mono-only/packer protections have no level — opt-in via the checklist.
@@ -32,6 +38,11 @@ export function ObfuscatePanel() {
   const [level, setLevel] = useState<string>(DEFAULT_LEVEL)
   const [agreed, setAgreed] = useState(false)
   const [progress, setProgress] = useState<{ stage: 'uploading' | 'obfuscating'; pct: number }>({ stage: 'uploading', pct: 0 })
+  const [deps, setDeps] = useState<File[]>([])
+  const [signingKey, setSigningKey] = useState<File | null>(null)
+  const [refs, setRefs] = useState<string[] | null>(null) // the main assembly's references, for gap detection
+  const [notice, setNotice] = useState('')
+  const [extrasOpen, setExtrasOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -58,11 +69,47 @@ export function ObfuscatePanel() {
 
   const pick = (f: File | null | undefined) => {
     if (!f) return
-    if (!/\.(dll|exe)$/i.test(f.name)) return fail('Only .dll / .exe assemblies.')
+    if (!isAssembly(f.name)) return fail('Only .dll / .exe assemblies.')
     if (f.size > 100 * 1024 * 1024) return fail('Assembly is over 100 MB.')
     setFile(f)
     setError('')
     setPhase('ready')
+    setDeps([]); setSigningKey(null); setRefs(null); setNotice(''); setExtrasOpen(false)
+    // Reference-gap detection: read the assembly's references so we can flag missing dependencies.
+    // Fail-open — a parse failure just means no hint. ponytail: reads the whole file into memory,
+    // which is fine for typical assemblies; switch to slice reads only if huge files become common.
+    f.arrayBuffer().then((buf) => setRefs(parseAssemblyRefs(buf) ?? [])).catch(() => setRefs([]))
+  }
+
+  const addDeps = (incoming: FileList | File[] | null) => {
+    if (!incoming) return
+    const list = Array.from(incoming)
+    const kept = new Map(deps.map((d) => [d.name.toLowerCase(), d]))
+    let total = deps.reduce((n, d) => n + d.size, 0)
+    let skippedKind = 0, skippedDupe = 0, skippedMain = 0, skippedSize = 0
+    for (const f of list) {
+      if (!isAssembly(f.name)) { skippedKind++; continue }
+      const key = f.name.toLowerCase()
+      if (file && key === file.name.toLowerCase()) { skippedMain++; continue }
+      if (kept.has(key)) { skippedDupe++; continue }
+      if (total + f.size > MAX_DEPS_BYTES) { skippedSize++; continue }
+      kept.set(key, f); total += f.size
+    }
+    setDeps([...kept.values()])
+    const parts = [
+      skippedKind && `${skippedKind} non-assembly`,
+      skippedDupe && `${skippedDupe} already added`,
+      skippedMain && `${skippedMain} is your main file`,
+      skippedSize && `${skippedSize} over the ${MAX_DEPS_BYTES / 1024 / 1024} MB cap`,
+    ].filter(Boolean)
+    setNotice(parts.length ? `Skipped ${parts.join(' · ')}.` : '')
+  }
+
+  const pickKey = (f: File | null | undefined) => {
+    if (!f) return
+    if (!/\.snk$/i.test(f.name)) return setNotice('Signing key must be a .snk file.')
+    setSigningKey(f)
+    setNotice('')
   }
 
   const fail = (msg: string) => {
@@ -76,29 +123,32 @@ export function ObfuscatePanel() {
     setProgress({ stage: 'uploading', pct: 0 })
     setError('')
     try {
-      const id = await startObfuscation(file, [...selected], agreed, (pct) => setProgress({ stage: 'uploading', pct }))
+      const id = await startObfuscation(file, [...selected], agreed, deps, signingKey, (pct) => setProgress({ stage: 'uploading', pct }))
       setProgress({ stage: 'obfuscating', pct: 100 })
       const status = await waitForResult(id)
       if (status === 'done') {
         setResult({ id, name: file.name })
         setPhase('done')
       } else if (status === 'failed') {
-        fail('Obfuscation failed — try a lower level, or the assembly may need its dependencies alongside it.')
+        fail('Obfuscation failed — try a lower level, or add the assembly’s dependencies below and retry.')
       } else {
         fail('Timed out waiting for the result.')
       }
     } catch (e) {
       fail(e instanceof Error ? e.message : 'Something broke.')
     }
-  }, [file, selected, agreed])   // agreed MUST be here — without it run() sends a stale agree=false
+  }, [file, selected, agreed, deps, signingKey])   // agreed MUST be here — without it run() sends a stale agree=false
 
   const reset = () => {
     setPhase('idle')
     setFile(null)
     setResult(null)
     setError('')
+    setDeps([]); setSigningKey(null); setRefs(null); setNotice(''); setExtrasOpen(false)
   }
 
+  const missing = refs ? missingRefs(refs, deps.map((d) => d.name)) : []
+  const hasThirdPartyRefs = refs ? missingRefs(refs, []).length > 0 : false
   const showDrop = phase === 'idle' || phase === 'error'
 
   return (
@@ -138,6 +188,14 @@ export function ObfuscatePanel() {
 
             {phase === 'ready' && (
               <>
+                <ExtrasSection
+                  open={extrasOpen || missing.length > 0} onToggle={() => setExtrasOpen(true)}
+                  deps={deps} onAddDeps={addDeps} onRemoveDep={(name) => setDeps((p) => p.filter((d) => d.name !== name))}
+                  onClearDeps={() => { setDeps([]); setNotice('') }}
+                  missing={missing} hasThirdPartyRefs={hasThirdPartyRefs}
+                  signingKey={signingKey} onPickKey={pickKey} onRemoveKey={() => setSigningKey(null)}
+                  notice={notice}
+                />
                 <ProtectionPicker catalog={catalog} selected={selected} level={level} onLevel={applyLevel} onToggle={toggle} />
                 <label className="flex items-start gap-2 text-left font-mono text-[11px] leading-snug text-muted">
                   <input type="checkbox" className="mt-0.5" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
@@ -173,6 +231,113 @@ export function ObfuscatePanel() {
           ↺ obfuscate another
         </button>
       )}
+    </div>
+  )
+}
+
+// Optional inputs that ride along with the assembly: dependency assemblies (so BitMono can resolve
+// references) and a strong-name key (.snk) to re-sign the output. Collapsed by default — it
+// auto-expands when reference-gap detection finds a dependency the user hasn't added yet.
+function ExtrasSection({
+  open, onToggle, deps, onAddDeps, onRemoveDep, onClearDeps, missing, hasThirdPartyRefs,
+  signingKey, onPickKey, onRemoveKey, notice,
+}: {
+  open: boolean
+  onToggle: () => void
+  deps: File[]
+  onAddDeps: (files: FileList | File[] | null) => void
+  onRemoveDep: (name: string) => void
+  onClearDeps: () => void
+  missing: string[]
+  hasThirdPartyRefs: boolean
+  signingKey: File | null
+  onPickKey: (f: File | null | undefined) => void
+  onRemoveKey: () => void
+  notice: string
+}) {
+  const [drag, setDrag] = useState(false)
+  const filesRef = useRef<HTMLInputElement>(null)
+  const folderRef = useRef<HTMLInputElement>(null)
+  const keyRef = useRef<HTMLInputElement>(null)
+  const expanded = open || deps.length > 0
+  const total = deps.reduce((n, d) => n + d.size, 0)
+
+  return (
+    <div className="w-full space-y-2 text-left">
+      {!expanded ? (
+        <button onClick={onToggle} aria-expanded={false}
+          className="flex w-full items-center gap-2 font-mono text-[11px] text-faint transition-colors hover:text-muted">
+          <span className="text-acid">+</span> add dependencies
+          <span className="ml-auto">optional · resolves references</span>
+        </button>
+      ) : (
+        <div className="rounded-xl border border-line bg-void/40 p-3">
+          <div className="mb-2 flex items-center gap-2 font-mono text-[11px]">
+            <span className="uppercase tracking-[0.18em] text-faint">dependencies</span>
+            {deps.length > 0 && <span className="text-muted">{deps.length} · {formatSize(total)}</span>}
+            {deps.length > 0 && (
+              <button onClick={onClearDeps} className="ml-auto text-faint transition-colors hover:text-red-400">clear all</button>
+            )}
+          </div>
+
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => { e.preventDefault(); setDrag(false); onAddDeps(e.dataTransfer.files) }}
+            className={`rounded-lg border border-dashed px-3 py-3 text-center font-mono text-[11px] transition-colors ${drag ? 'border-acid bg-surface' : 'border-line'}`}
+          >
+            <span className="text-muted">drop .dll files, or </span>
+            <button onClick={() => filesRef.current?.click()} className="text-acid hover:underline">browse</button>
+            <span className="text-muted"> · </span>
+            <button onClick={() => folderRef.current?.click()} className="text-acid hover:underline">pick a folder</button>
+          </div>
+
+          {deps.length > 0 && (
+            <div className="mt-2 max-h-44 space-y-0.5 overflow-y-auto">
+              {deps.map((d) => (
+                <div key={d.name} className="flex items-center gap-2 rounded px-1.5 py-1 font-mono text-[12px] hover:bg-surface/60">
+                  <span className="min-w-0 flex-1 truncate text-ink">{d.name}</span>
+                  <span className="shrink-0 tabular-nums text-faint">{formatSize(d.size)}</span>
+                  <button onClick={() => onRemoveDep(d.name)} aria-label={`Remove ${d.name}`}
+                    className="shrink-0 text-faint transition-colors hover:text-red-400">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {missing.length > 0 ? (
+            <p className="mt-2 font-mono text-[11px] leading-snug text-muted" aria-live="polite">
+              {missing.length} referenced {missing.length === 1 ? 'assembly isn’t' : 'assemblies aren’t'} here —{' '}
+              <span className="text-ink">{missing.slice(0, 6).join(', ')}{missing.length > 6 ? '…' : ''}</span>. Add them for full coverage.
+            </p>
+          ) : hasThirdPartyRefs && deps.length > 0 ? (
+            <p className="mt-2 font-mono text-[11px] text-acid" aria-live="polite">✓ all references resolved</p>
+          ) : null}
+        </div>
+      )}
+
+      {signingKey ? (
+        <div className="flex items-center gap-2 font-mono text-[11px]">
+          <span className="text-faint">signing //</span>
+          <span className="min-w-0 flex-1 truncate text-ink">{signingKey.name}</span>
+          <button onClick={onRemoveKey} aria-label="Remove signing key" className="text-faint transition-colors hover:text-red-400">✕</button>
+        </div>
+      ) : (
+        <button onClick={() => keyRef.current?.click()}
+          className="flex w-full items-center gap-2 font-mono text-[11px] text-faint transition-colors hover:text-muted">
+          <span className="text-acid">+</span> sign the output with a strong-name key
+          <span className="ml-auto">optional · .snk</span>
+        </button>
+      )}
+
+      {notice && <p className="font-mono text-[11px] leading-snug text-faint" aria-live="polite">{notice}</p>}
+
+      <input ref={filesRef} type="file" accept=".dll,.exe" multiple hidden
+        onChange={(e) => { onAddDeps(e.target.files); e.target.value = '' }} />
+      <input ref={(el) => { folderRef.current = el; el?.setAttribute('webkitdirectory', '') }} type="file" multiple hidden
+        onChange={(e) => { onAddDeps(e.target.files); e.target.value = '' }} />
+      <input ref={keyRef} type="file" accept=".snk" hidden
+        onChange={(e) => { onPickKey(e.target.files?.[0]); e.target.value = '' }} />
     </div>
   )
 }
