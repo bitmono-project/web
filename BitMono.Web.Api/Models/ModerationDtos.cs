@@ -59,3 +59,17 @@ public sealed record AdminCrackmeRow(
     long DownloadCount,
     DateTime CreatedAt,
     DateTime? PublishedAt);
+
+// A row in the admin's user list — every registered account, newest first, searchable by name/handle/email.
+public sealed record AdminUserRow(
+    Guid Id,
+    string DisplayName,
+    string? Handle,
+    string? AvatarUrl,
+    string? Email,
+    string Provider,
+    UserRole Role,
+    bool IsBanned,
+    int Points,
+    DateTime CreatedAt,
+    DateTime LastLoginAt);

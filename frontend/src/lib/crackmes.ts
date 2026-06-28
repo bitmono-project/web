@@ -425,6 +425,28 @@ export async function getAdminCrackmes(q: string, status: string): Promise<Admin
   return (await res.json()) as AdminCrackmeRow[]
 }
 
+export interface AdminUserRow {
+  id: string
+  displayName: string
+  handle: string | null
+  avatarUrl: string | null
+  email: string | null
+  provider: string
+  role: string
+  isBanned: boolean
+  points: number
+  createdAt: string
+  lastLoginAt: string
+}
+
+export async function getAdminUsers(q: string): Promise<AdminUserRow[]> {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  const res = await fetch(`/api/moderation/users?${params.toString()}`)
+  if (!res.ok) return []
+  return (await res.json()) as AdminUserRow[]
+}
+
 // --- comments + ratings ---
 
 export interface CommentItem {

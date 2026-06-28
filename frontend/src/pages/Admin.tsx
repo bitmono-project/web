@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import { isAdmin, useAuth } from '../lib/auth'
 import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
 import {
-  type ModerationStats, type AdminCrackmeRow,
-  getModerationStats, getAdminCrackmes, takedownCrackme, restoreCrackme,
+  type ModerationStats, type AdminCrackmeRow, type AdminUserRow,
+  getModerationStats, getAdminCrackmes, getAdminUsers, takedownCrackme, restoreCrackme,
   statusLabel, statusBadgeClass, formatDate,
 } from '../lib/crackmes'
 
@@ -48,6 +48,7 @@ export default function Admin() {
             <TopDownloaded items={stats.topDownloaded} />
           </div>
           <CrackmeManager />
+          <UserManager />
         </>
       )}
     </main>
@@ -224,6 +225,49 @@ function CrackmeManager() {
           onCancel={() => setRestoring(null)}
         />
       )}
+    </div>
+  )
+}
+
+function UserManager() {
+  const [q, setQ] = useState('')
+  const [rows, setRows] = useState<AdminUserRow[]>([])
+
+  const load = useCallback(() => { getAdminUsers(q).then(setRows) }, [q])
+  useEffect(() => {
+    const t = setTimeout(load, 250) // debounce search typing
+    return () => clearTimeout(t)
+  }, [load])
+
+  return (
+    <div className="mt-12">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <h2 className="font-display text-2xl font-bold text-ink">Users</h2>
+        <input
+          value={q} onChange={(e) => setQ(e.target.value)} placeholder="search name, handle or email…"
+          className="ml-auto w-56 rounded-lg border border-line bg-surface px-3 py-1.5 font-mono text-[13px] text-ink outline-none focus:border-acid"
+        />
+      </div>
+
+      <div className="space-y-2">
+        {rows.length === 0 && <p className="font-mono text-[13px] text-faint">No users match.</p>}
+        {rows.map((u) => (
+          <div key={u.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-surface/30 p-3">
+            {u.avatarUrl
+              ? <img src={u.avatarUrl} alt="" className="h-6 w-6 shrink-0 rounded-full" />
+              : <div className="h-6 w-6 shrink-0 rounded-full bg-line" />}
+            {u.handle
+              ? <Link to={`/user/${u.handle}`} className="font-mono text-[13px] text-ink transition-colors hover:text-acid">{u.displayName}</Link>
+              : <span className="font-mono text-[13px] text-ink">{u.displayName}</span>}
+            {u.handle && <span className="font-mono text-[11px] text-faint">@{u.handle}</span>}
+            {u.role !== 'user' && <span className="rounded border border-acid/40 px-1.5 py-px font-mono text-[11px] uppercase tracking-wider text-acid">{u.role}</span>}
+            {u.isBanned && <span className="rounded border border-red-400/40 px-1.5 py-px font-mono text-[11px] uppercase tracking-wider text-red-400">banned</span>}
+            <span className="font-mono text-[11px] text-faint">{u.provider}</span>
+            {u.email && <span className="truncate font-mono text-[11px] text-faint">{u.email}</span>}
+            <span className="ml-auto shrink-0 font-mono text-[11px] text-faint">{u.points.toLocaleString()} pts · joined {formatDate(u.createdAt)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

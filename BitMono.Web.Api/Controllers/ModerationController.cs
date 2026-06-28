@@ -396,6 +396,30 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             .ToListAsync(ct);
     }
 
+    // Searchable list of registered users so admins can see who's signed up.
+    [HttpGet("users")]
+    [Authorize(Policy = AuthSetup.AdminPolicy)]
+    public async Task<IReadOnlyList<AdminUserRow>> AdminUsers([FromQuery] string? q, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+
+        var query = db.Users.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+            query = query.Where(u => EF.Functions.ILike(u.DisplayName, $"%{q}%")
+                || (u.Handle != null && EF.Functions.ILike(u.Handle, $"%{q}%"))
+                || (u.Email != null && EF.Functions.ILike(u.Email, $"%{q}%")));
+
+        // ponytail: newest 200; add paging if the user table outgrows one scroll.
+        return await query
+            .OrderByDescending(u => u.CreatedAt)
+            .Take(200)
+            .Select(u => new AdminUserRow(
+                u.Id, u.DisplayName, u.Handle, u.AvatarUrl, u.Email, u.Provider,
+                u.Role, u.IsBanned, u.Points, u.CreatedAt, u.LastLoginAt))
+            .ToListAsync(ct);
+    }
+
     private async Task<IActionResult> ActAsync(Guid id, bool approve, string? message, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
