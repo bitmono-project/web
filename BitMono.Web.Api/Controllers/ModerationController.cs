@@ -246,7 +246,13 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             .OrderBy(r => r.CreatedAt)
             .Select(r => new PendingReport(
                 r.Id, r.Crackme!.Slug, r.Crackme.Title, r.Reason, r.Details,
-                r.ReporterIp ?? AppConstants.AnonymousHandle, r.CreatedAt))
+                r.ReporterUserId == null
+                    ? (r.ReporterIp ?? AppConstants.AnonymousHandle)
+                    : (db.Users.Where(u => u.Id == r.ReporterUserId).Select(u => u.DisplayName).FirstOrDefault() ?? AppConstants.AnonymousHandle),
+                r.ReporterUserId == null
+                    ? null
+                    : db.Users.Where(u => u.Id == r.ReporterUserId).Select(u => u.Handle).FirstOrDefault(),
+                r.CreatedAt))
             .ToListAsync(ct);
     }
 

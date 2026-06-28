@@ -579,6 +579,7 @@ export interface PendingReport {
   reason: string
   details: string | null
   reporter: string
+  reporterHandle: string | null
   createdAt: string
 }
 

@@ -125,7 +125,11 @@ export default function Moderation() {
                   <div className="font-mono text-[13px]">
                     <span className="rounded border border-red-400/40 px-1.5 py-px text-[11px] uppercase text-red-400">{r.reason}</span>{' '}
                     <Link to={`/challenge/${r.crackmeSlug}`} className="text-acid hover:underline">{r.crackmeTitle}</Link>
-                    <span className="ml-2 text-faint">{r.reporter} · {formatDate(r.createdAt)}</span>
+                    <span className="ml-2 text-faint">
+                      {r.reporterHandle
+                        ? <Link to={`/user/${r.reporterHandle}`} className="transition-colors hover:text-acid">{r.reporter}</Link>
+                        : r.reporter} · {formatDate(r.createdAt)}
+                    </span>
                   </div>
                   <button onClick={() => resolveOne(r.id)} disabled={busy === r.id} className="rounded-full border border-line px-3 py-1.5 font-mono text-[12px] text-ink transition-colors hover:border-acid hover:text-acid disabled:opacity-50">resolve</button>
                 </div>
