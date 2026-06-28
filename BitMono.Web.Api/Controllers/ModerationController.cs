@@ -119,13 +119,17 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
     // Undo a takedown — restores the crackme to the public gallery.
     [HttpPost("{id:guid}/restore")]
     [Authorize(Policy = AuthSetup.AdminPolicy)]
-    public async Task<IActionResult> Restore(Guid id, CancellationToken ct)
+    public async Task<IActionResult> Restore(Guid id, [FromBody] RestoreRequest? req, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
         var c = await db.Crackmes.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (c is null)
             return NotFound();
+
+        var reason = req?.Reason?.Trim();
+        if (reason is { Length: > 1000 })
+            reason = reason[..1000];
 
         var now = DateTime.UtcNow;
         c.IsTakenDown = false;
@@ -143,7 +147,8 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             TargetId = c.Id,
             CrackmeId = c.Id,
             ReviewerId = Guid.Parse(User.FindFirstValue("uid")!),
-            Verdict = ModerationVerdict.Approved,
+            Verdict = ModerationVerdict.Restored,
+            PublicMessage = reason,
             IsTakedown = false,
             CreatedAt = now,
         });

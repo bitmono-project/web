@@ -123,8 +123,11 @@ export function formatSize(bytes: number): string {
   return `${bytes} B`
 }
 
+// Local-time `YYYY-MM-DD HH:MM` — the UI shows timestamps to the minute everywhere this is used.
 export function formatDate(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10)
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 export async function listCrackmes(f: CrackmeFilters): Promise<CrackmeListResponse> {
@@ -346,8 +349,25 @@ export async function takedownCrackme(id: string, reason: string): Promise<boole
   return res.ok
 }
 
-export async function restoreCrackme(id: string): Promise<boolean> {
-  return (await fetch(`/api/moderation/${id}/restore`, { method: 'POST' })).ok
+export async function restoreCrackme(id: string, reason: string): Promise<boolean> {
+  return (await fetch(`/api/moderation/${id}/restore`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+  })).ok
+}
+
+// Public takedown/restore trail for a crackme. `moderator` is a real name only for admin viewers;
+// otherwise null and the UI shows "a moderator".
+export interface ModerationEvent {
+  action: 'takenDown' | 'restored'
+  reason: string | null
+  at: string
+  moderator: string | null
+}
+
+export async function getModerationHistory(slug: string): Promise<ModerationEvent[]> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/moderation-history`)
+  if (!res.ok) return []
+  return (await res.json()) as ModerationEvent[]
 }
 
 export interface ModerationStats {

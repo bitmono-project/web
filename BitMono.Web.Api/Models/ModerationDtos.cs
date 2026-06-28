@@ -23,6 +23,9 @@ public sealed record ModerationActionRequest(string? Message);
 // Taking a crackme down requires a reason — it's shown publicly on the tombstone and to the uploader.
 public sealed record TakedownRequest(string Reason);
 
+// Restoring is logged too; the optional reason shows in the public moderation history.
+public sealed record RestoreRequest(string? Reason);
+
 // Admin dashboard analytics. One round-trip; the frontend renders cards + a small chart/top-list.
 public sealed record ModerationStats(
     int TotalCrackmes,

@@ -89,14 +89,16 @@ export default function CrackmesList() {
 }
 
 function Row({ c }: { c: CrackmeListItem }) {
+  // ponytail: stretched-link — the title's ::after covers the whole <tr>, so a click anywhere on the
+  // row opens the crackme while real links (author) stay clickable via z-10. CSS only; cmd/middle-click works.
   return (
-    <tr className="border-b border-line/60 transition-colors hover:bg-surface/50">
+    <tr className="relative cursor-pointer border-b border-line/60 transition-colors hover:bg-surface/50">
       <Td>
-        <Link to={`/challenge/${c.slug}`} className="text-ink transition-colors hover:text-acid">{c.title}</Link>
+        <Link to={`/challenge/${c.slug}`} className="text-ink transition-colors after:absolute after:inset-0 hover:text-acid">{c.title}</Link>
       </Td>
       <Td className="text-muted">
         {c.authorHandle
-          ? <Link to={`/user/${c.authorHandle}`} className="transition-colors hover:text-acid">{c.author}</Link>
+          ? <Link to={`/user/${c.authorHandle}`} className="relative z-10 transition-colors hover:text-acid">{c.author}</Link>
           : c.author}
       </Td>
       <Td className="text-muted">{c.runtime ?? platformLabel(c.platform)}</Td>

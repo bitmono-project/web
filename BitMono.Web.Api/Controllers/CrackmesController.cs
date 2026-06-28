@@ -97,7 +97,12 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (c is null)
             return NotFound();
         if (c.IsTakenDown)
-            return Tombstone(c);
+        {
+            var takedownHandle = c.UploaderUserId is { } downUp
+                ? await db.Users.AsNoTracking().Where(u => u.Id == downUp).Select(u => u.Handle).FirstOrDefaultAsync(ct)
+                : null;
+            return Tombstone(c, takedownHandle);
+        }
         if (c.Status != CrackmeStatus.Approved)
             return NotFound();
 
@@ -113,6 +118,45 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             : null;
 
         return ToDetail(c, isOwner: uid is not null && uid == c.UploaderUserId, counts, mine, solvedByMe, authorHandle);
+    }
+
+    // Public takedown/restore trail for a crackme — visible to everyone so removals/restores are transparent.
+    // The acting moderator's real name is revealed only to admins; everyone else sees "a moderator".
+    [HttpGet("{slug}/moderation-history")]
+    public async Task<ActionResult<IReadOnlyList<ModerationEvent>>> ModerationHistory(string slug, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+
+        var crackmeId = await db.Crackmes.AsNoTracking()
+            .Where(x => x.Slug == slug && (x.Status == CrackmeStatus.Approved || x.Status == CrackmeStatus.TakenDown))
+            .Select(x => (Guid?)x.Id).FirstOrDefaultAsync(ct);
+        if (crackmeId is null)
+            return NotFound();
+
+        var rows = await db.ModerationReviews.AsNoTracking()
+            .Where(r => r.CrackmeId == crackmeId && (r.IsTakedown || r.Verdict == ModerationVerdict.Restored))
+            .OrderByDescending(r => r.CreatedAt)
+            .Select(r => new { r.IsTakedown, r.TakedownReason, r.PublicMessage, r.CreatedAt, r.ReviewerId })
+            .ToListAsync(ct);
+
+        var isAdmin = User.IsInRole(nameof(UserRole.Admin));
+        var names = new Dictionary<Guid, string>();
+        if (isAdmin && rows.Count > 0)
+        {
+            var ids = rows.Select(r => r.ReviewerId).Distinct().ToList();
+            names = await db.Users.AsNoTracking()
+                .Where(u => ids.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+        }
+
+        var events = rows.Select(r => new ModerationEvent(
+            r.IsTakedown ? ModerationEventAction.TakenDown : ModerationEventAction.Restored,
+            r.IsTakedown ? r.TakedownReason : r.PublicMessage,
+            r.CreatedAt,
+            isAdmin && names.TryGetValue(r.ReviewerId, out var n) ? n : null)).ToList();
+
+        return Ok(events);
     }
 
     [HttpPost("{slug}/solve")]
@@ -614,7 +658,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
 
     // A stripped-down detail for a taken-down crackme: keep title/author so the page still means
     // something, but drop description/download/reactions and surface the takedown reason.
-    private static CrackmeDetail Tombstone(Crackme c) => new(
+    private static CrackmeDetail Tombstone(Crackme c, string? authorHandle) => new(
         c.Id, c.Slug, c.Title, Description: null, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
         c.TargetPlatform, c.DotnetRuntime, c.Language,
         c.AuthorDifficulty, AvgDifficulty: null, DifficultyCount: 0,
@@ -625,7 +669,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         ReactionsEnabled: false, CommentReactionsEnabled: false,
         Reactions: new Dictionary<string, int>(), MyReactions: [],
         Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt,
-        SolvedByMe: false, AuthorHandle: null, VerificationKind: VerificationKind.None);
+        SolvedByMe: false, AuthorHandle: authorHandle, VerificationKind: VerificationKind.None);
 
     private Guid? CurrentUserId() =>
         User.Identity?.IsAuthenticated == true && Guid.TryParse(User.FindFirstValue("uid"), out var id) ? id : null;

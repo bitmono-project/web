@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isAdmin, useAuth } from '../lib/auth'
-import { PromptDialog, TAKEDOWN_PRESETS } from '../components/PromptDialog'
+import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
 import {
   type ModerationStats, type AdminCrackmeRow,
   getModerationStats, getAdminCrackmes, takedownCrackme, restoreCrackme,
@@ -141,6 +141,7 @@ function CrackmeManager() {
   const [rows, setRows] = useState<AdminCrackmeRow[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [takingDown, setTakingDown] = useState<AdminCrackmeRow | null>(null)
+  const [restoring, setRestoring] = useState<AdminCrackmeRow | null>(null)
 
   const load = useCallback(() => { getAdminCrackmes(q, status).then(setRows) }, [q, status])
   useEffect(() => {
@@ -155,9 +156,10 @@ function CrackmeManager() {
     setBusy(null)
     if (ok) load()
   }
-  const restore = async (row: AdminCrackmeRow) => {
+  const doRestore = async (row: AdminCrackmeRow, reason: string) => {
+    setRestoring(null)
     setBusy(row.id)
-    const ok = await restoreCrackme(row.id)
+    const ok = await restoreCrackme(row.id, reason)
     setBusy(null)
     if (ok) load()
   }
@@ -187,7 +189,7 @@ function CrackmeManager() {
             <span className={statusBadgeClass(r.status)}>{statusLabel(r.status)}</span>
             <span className="font-mono text-[11px] text-faint">{r.downloadCount.toLocaleString()} dl · {formatDate(r.createdAt)}</span>
             {r.isTakenDown ? (
-              <button onClick={() => restore(r)} disabled={busy === r.id} className="ml-auto rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-acid hover:text-acid disabled:opacity-50">restore</button>
+              <button onClick={() => setRestoring(r)} disabled={busy === r.id} className="ml-auto rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-acid hover:text-acid disabled:opacity-50">restore</button>
             ) : (
               <button onClick={() => setTakingDown(r)} disabled={busy === r.id} className="ml-auto rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-red-400 hover:text-red-400 disabled:opacity-50">take down</button>
             )}
@@ -198,13 +200,26 @@ function CrackmeManager() {
       {takingDown && (
         <PromptDialog
           title="Take down crackme"
-          label={`“${takingDown.title}” — shown publicly on the crackme page.`}
+          label={`“${takingDown.title}”`}
+          warning="This reason is shown publicly on the takedown page and recorded in the moderation history — everyone can read it."
           placeholder="pick a reason above, or write your own"
           confirmText="take down"
           danger
           presets={TAKEDOWN_PRESETS}
           onConfirm={(reason) => doTakedown(takingDown, reason)}
           onCancel={() => setTakingDown(null)}
+        />
+      )}
+      {restoring && (
+        <PromptDialog
+          title="Restore crackme"
+          label={`“${restoring.title}” — back into the public gallery.`}
+          warning="This action and your reason are recorded in the public moderation history that everyone can see."
+          placeholder="why are you restoring this?"
+          confirmText="restore"
+          presets={RESTORE_PRESETS}
+          onConfirm={(reason) => doRestore(restoring, reason)}
+          onCancel={() => setRestoring(null)}
         />
       )}
     </div>

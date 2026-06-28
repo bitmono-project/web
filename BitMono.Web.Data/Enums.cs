@@ -13,7 +13,11 @@ public enum Difficulty { VeryEasy = 1, Easy, Medium, Hard, VeryHard, Insane }
 public enum SolutionStatus { Pending, Approved, Rejected, Hidden }
 
 // Mirrors Safeturned's AdminVerdict shape, retuned for the gallery lifecycle.
-public enum ModerationVerdict { None, Approved, Suspicious, Malware, Disallowed, Spam, FalsePositive, TakenDown }
+// Append-only (stored as int) — Restored marks an undo of a takedown, distinct from a first-time Approved.
+public enum ModerationVerdict { None, Approved, Suspicious, Malware, Disallowed, Spam, FalsePositive, TakenDown, Restored }
+
+// Kind of entry in the public moderation history. Serialized camelCase ("takenDown"/"restored").
+public enum ModerationEventAction { TakenDown, Restored }
 
 // Lets one review/report table cover all user content.
 public enum ModeratableType { Crackme, Solution, Comment }

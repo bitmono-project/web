@@ -7,11 +7,12 @@ import {
   getWriteups, submitWriteup, writeupAttachmentUrl,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
   REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
+  type ModerationEvent, getModerationHistory,
   markSolved, unmarkSolved, submitFlag, setVerification, VERIFICATION_KINDS,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
 import { type Me, isAdmin, useAuth } from '../lib/auth'
-import { PromptDialog, TAKEDOWN_PRESETS } from '../components/PromptDialog'
+import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
 import { getConfig } from '../lib/config'
 
 export default function CrackmeDetail() {
@@ -113,6 +114,7 @@ export default function CrackmeDetail() {
       </p>
 
       <ReportControl slug={c.slug} />
+      <ModerationHistory slug={c.slug} />
 
       <RatingsPanel slug={c.slug} me={me} initial={c} />
       <WriteupsPanel slug={c.slug} me={me} zipPassword={zipPassword} />
@@ -136,9 +138,11 @@ export default function CrackmeDetail() {
 // Shown instead of the full page when a crackme has been taken down — a public notice with the reason.
 function Tombstone({ c, canRestore, onRestore }: { c: Detail; canRestore: boolean; onRestore: () => void }) {
   const [busy, setBusy] = useState(false)
-  const restore = async () => {
+  const [prompting, setPrompting] = useState(false)
+  const restore = async (reason: string) => {
+    setPrompting(false)
     setBusy(true)
-    const ok = await restoreCrackme(c.id)
+    const ok = await restoreCrackme(c.id, reason)
     setBusy(false)
     if (ok) onRestore()
   }
@@ -148,7 +152,9 @@ function Tombstone({ c, canRestore, onRestore }: { c: Detail; canRestore: boolea
       <div className="mt-6 rounded-xl border border-red-400/40 bg-red-400/5 p-8 text-center">
         <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-red-400">Taken down</div>
         <h1 className="mt-3 font-display text-3xl font-bold text-ink">{c.title}</h1>
-        <p className="mt-1 font-mono text-sm text-muted">by {c.author}</p>
+        <p className="mt-1 font-mono text-sm text-muted">by {c.authorHandle
+          ? <Link to={`/user/${c.authorHandle}`} className="text-muted transition-colors hover:text-acid">{c.author}</Link>
+          : c.author}</p>
         <p className="mt-6 font-mono text-sm leading-relaxed text-ink/80">
           This crackme was removed by a moderator and is no longer available for download.
         </p>
@@ -161,12 +167,59 @@ function Tombstone({ c, canRestore, onRestore }: { c: Detail; canRestore: boolea
       </div>
       {canRestore && (
         <div className="mt-4 text-center">
-          <button onClick={restore} disabled={busy} className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-acid hover:text-acid disabled:opacity-50">
+          <button onClick={() => setPrompting(true)} disabled={busy} className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-acid hover:text-acid disabled:opacity-50">
             {busy ? '…' : 'restore this crackme'}
           </button>
         </div>
       )}
+      <ModerationHistory slug={c.slug} />
+      {prompting && (
+        <PromptDialog
+          title="Restore crackme"
+          label="Put this back in the public gallery."
+          warning="This action and your reason are recorded in the public moderation history that everyone can see."
+          placeholder="why are you restoring this?"
+          confirmText="restore"
+          presets={RESTORE_PRESETS}
+          onConfirm={restore}
+          onCancel={() => setPrompting(false)}
+        />
+      )}
     </main>
+  )
+}
+
+// Public takedown/restore trail — shown on both the live page and the tombstone whenever a crackme has
+// been moderated. Renders nothing for the common never-touched case, so it self-hides.
+function ModerationHistory({ slug }: { slug: string }) {
+  const [events, setEvents] = useState<ModerationEvent[]>([])
+  useEffect(() => { getModerationHistory(slug).then(setEvents).catch(() => {}) }, [slug])
+  if (events.length === 0) return null
+  return (
+    <div className="mt-10">
+      <div className="mb-3 font-mono text-[11px] uppercase tracking-wider text-faint">
+        Moderation history <span className="text-faint">· {events.length}</span>
+      </div>
+      <ol className="relative ml-1 border-l border-line pl-6">
+        {events.map((e, i) => <ModEvent key={i} e={e} />)}
+      </ol>
+    </div>
+  )
+}
+
+function ModEvent({ e }: { e: ModerationEvent }) {
+  const down = e.action === 'takenDown'
+  return (
+    <li className="relative pb-6 last:pb-0">
+      <span className={`absolute -left-6 top-1 h-2.5 w-2.5 -translate-x-1/2 rounded-full ring-4 ring-void ${down ? 'bg-red-400' : 'bg-acid'}`} />
+      <div className="flex flex-wrap items-baseline gap-x-2 font-mono text-[12px]">
+        <span className={`font-bold uppercase tracking-wider ${down ? 'text-red-400' : 'text-acid'}`}>
+          {down ? 'Taken down' : 'Restored'}
+        </span>
+        <span className="text-faint">{formatDate(e.at)} · {e.moderator ?? 'a moderator'}</span>
+      </div>
+      {e.reason && <p className="mt-1 font-mono text-[13px] leading-relaxed text-ink/80">“{e.reason}”</p>}
+    </li>
   )
 }
 
@@ -191,7 +244,8 @@ function AdminControls({ c, onChange }: { c: Detail; onChange: () => void }) {
       {prompting && (
         <PromptDialog
           title="Take down crackme"
-          label="Shown publicly on the crackme page and to the author."
+          label="Pick a reason or write your own."
+          warning="This reason is shown publicly on the takedown page — the author and everyone who visits can read it."
           placeholder="pick a reason above, or write your own"
           confirmText="take down"
           danger

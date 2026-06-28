@@ -9,9 +9,10 @@ RUN npm run build
 
 FROM node:22-alpine AS final
 WORKDIR /app
-RUN npm init -y && npm install express@4 http-proxy-middleware@3
+RUN npm init -y && npm install express@4 http-proxy-middleware@3 @resvg/resvg-js@2
 COPY --from=build /app/dist ./dist
-COPY server.mjs ./
+COPY server.mjs og.mjs ./
+COPY og ./og
 ENV NODE_ENV=production
 EXPOSE 8429
 CMD ["node", "server.mjs"]

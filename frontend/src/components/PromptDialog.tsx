@@ -19,6 +19,13 @@ export const TAKEDOWN_PRESETS = [
   'Broken / no longer works',
 ]
 
+export const RESTORE_PRESETS = [
+  'False positive — re-reviewed',
+  'Mistaken takedown',
+  'Issue resolved',
+  'Appeal accepted',
+]
+
 // A yes/no confirmation in the same style — a speed bump for one-click actions (e.g. approve) so a
 // misclick doesn't go through. Click-outside or Esc cancels.
 export function ConfirmDialog({ title, message, confirmText, danger, onConfirm, onCancel }: {
@@ -51,9 +58,10 @@ export function ConfirmDialog({ title, message, confirmText, danger, onConfirm, 
 
 // An in-app replacement for window.prompt — same dark/acid style as the rest of the site.
 // Click-outside or Esc cancels; the confirm button stays disabled until there's text.
-export function PromptDialog({ title, label, placeholder, confirmText, danger, presets, onConfirm, onCancel }: {
+export function PromptDialog({ title, label, warning, placeholder, confirmText, danger, presets, onConfirm, onCancel }: {
   title: string
   label?: string
+  warning?: string
   placeholder?: string
   confirmText: string
   danger?: boolean
@@ -69,6 +77,11 @@ export function PromptDialog({ title, label, placeholder, confirmText, danger, p
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-line bg-surface p-6">
         <h2 className="font-display text-xl font-bold text-ink">{title}</h2>
         {label && <p className="mt-1 font-mono text-[12px] leading-snug text-faint">{label}</p>}
+        {warning && (
+          <p className="mt-3 flex items-start gap-2 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2 font-mono text-[12px] leading-snug text-red-300">
+            <span aria-hidden>⚠</span><span>{warning}</span>
+          </p>
+        )}
         {presets && presets.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {presets.map((p) => (
