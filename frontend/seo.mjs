@@ -47,6 +47,16 @@ async function fetchJson(url) {
   } catch { return null }
 }
 
+// Display maps mirrored from the client (crackmes.ts) so the prerendered body matches the React render.
+// Kept tiny and local — seo.mjs is plain ESM and can't import the client's TS.
+const PLATFORM = { dotNet: '.NET', mono: 'Mono', netFramework: '.NET Framework', unity: 'Unity', iL2CPP: 'IL2CPP', native: 'Native', other: 'Other' }
+const LANGUAGE = { cSharp: 'C#', fSharp: 'F#', vbNet: 'VB.NET', cpp: 'C/C++', other: 'Other' }
+const DIFFNUM = { veryEasy: 1, easy: 2, medium: 3, hard: 4, veryHard: 5, insane: 6 }
+const DIFFLABEL = { veryEasy: 'Very Easy', easy: 'Easy', medium: 'Medium', hard: 'Hard', veryHard: 'Very Hard', insane: 'Insane' }
+const fmtSize = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(2)} MB` : b >= 1024 ? `${(b / 1024).toFixed(2)} KB` : `${b} B`)
+const runtimeOf = (c) => c.runtime || PLATFORM[c.platform] || '.NET'
+const diffOf = (c) => (c.avgDifficulty != null ? c.avgDifficulty : DIFFNUM[c.authorDifficulty] ?? null)
+
 // --- JSON-LD builders (schema.org). Emit a property only when we have real data; conditional blocks
 // (aggregateRating, image, author url) are omitted when missing so the Rich Results Test stays clean. ---
 
@@ -162,6 +172,82 @@ function descriptionFor(c) {
   return `A ${c.runtime || '.NET'} crackme by ${c.author}${diff}. Reverse it and prove your solve on BitMono.`
 }
 
+// --- Prerendered page body, injected into #root. React's createRoot clears #root on mount (the standard
+// loading-fallback pattern), so the client app replaces this with no duplication. It mirrors the real page
+// (no cloaking) so non-JS crawlers (Bing, AI bots, Google's first wave) see content + internal links, and
+// everyone gets a faster first paint. Interactive bits (obfuscate panel, filters, comments) are omitted —
+// they carry no SEO value and only the client renders them. ---
+
+function homeBody() {
+  const protections = ['FullRenamer', 'NoNamespaces', 'StringsEncryption', 'AntiDe4dot', 'AntiILdasm', 'CallToCalli', 'DotNetHook', 'AntiDebugBreakpoints', 'BillionNops', 'UnmanagedString']
+  const pillars = [
+    ['01', 'Static, never run', 'BitMono rewrites the IL with AsmResolver. Your assembly is analyzed, never executed — safe by construction.'],
+    ['02', 'Nothing is kept', 'Your upload is deleted the instant it’s obfuscated, and the result is wiped the moment you download it.'],
+    ['03', 'The real engine', 'The same BitMono that ships on NuGet and runs in CI pipelines — not a watered-down web port.'],
+  ]
+  return `<main class="mx-auto max-w-6xl px-6">
+  <section class="pt-14 pb-10 text-center md:pt-24">
+    <h1 class="mx-auto mt-7 max-w-4xl font-display text-5xl font-extrabold leading-[0.95] tracking-tight md:text-7xl">Obfuscate your <span class="text-acid">.NET</span> right in the browser.</h1>
+    <p class="mx-auto mt-6 max-w-xl font-mono text-sm leading-relaxed text-muted md:text-base">Free &amp; open-source obfuscator for .NET and Mono. Drop a .dll — get it back with renamed symbols, stripped namespaces and encrypted strings. No install, nothing stored.</p>
+  </section>
+  <section class="border-y border-line py-5"><div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-xs text-faint"><span class="text-muted">protections //</span>${protections.map((p) => `<span>${esc(p)}</span>`).join('')}</div></section>
+  <section class="my-16 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-3">${pillars.map(([n, t, b]) => `<div class="bg-void p-7"><div class="font-mono text-xs text-acid">${n}</div><h2 class="mt-3 font-display text-lg font-bold text-ink">${esc(t)}</h2><p class="mt-2 font-mono text-[13px] leading-relaxed text-muted">${esc(b)}</p></div>`).join('')}</section>
+</main>`
+}
+
+function listBody(origin, items) {
+  const rows = items.map((c) => {
+    const d = diffOf(c)
+    return `<tr class="border-b border-line/60"><td class="px-3 py-2"><a href="/challenge/${encodeURIComponent(c.slug)}" class="text-ink hover:text-acid">${esc(c.title)}</a></td><td class="px-3 py-2 text-muted">${esc(c.author)}</td><td class="px-3 py-2 text-muted">${esc(runtimeOf(c))}</td><td class="px-3 py-2 text-acid">${d != null ? d.toFixed(1) : '—'}</td></tr>`
+  }).join('')
+  return `<main class="mx-auto max-w-6xl px-6 py-12">
+  <h1 class="font-display text-4xl font-extrabold tracking-tight text-ink">Crackmes</h1>
+  <p class="mt-2 font-mono text-sm text-muted">BitMono-obfuscated .NET challenges. Reverse them, write it up.</p>
+  <table class="mt-6 w-full border-collapse font-mono text-[13px]"><thead><tr class="border-b border-line text-left text-faint"><th class="px-3 py-2">Name</th><th class="px-3 py-2">Author</th><th class="px-3 py-2">Runtime</th><th class="px-3 py-2">Diff</th></tr></thead><tbody>${rows}</tbody></table>
+</main>`
+}
+
+function challengeBody(origin, c) {
+  if (c.status === 'takenDown') {
+    return `<main class="mx-auto max-w-4xl px-6 py-12"><h1 class="font-display text-4xl font-extrabold tracking-tight text-ink">${esc(c.title)}</h1><p class="mt-4 font-mono text-sm text-muted">This crackme has been taken down.</p></main>`
+  }
+  const author = c.authorHandle
+    ? `<a href="/user/${encodeURIComponent(c.authorHandle)}" class="text-muted hover:text-acid">${esc(c.author)}</a>`
+    : esc(c.author)
+  const d = diffOf(c)
+  const field = (label, val) => `<div><dt class="text-[11px] uppercase tracking-wider text-faint">${label}</dt><dd class="mt-1 text-ink">${esc(val)}</dd></div>`
+  const prots = c.protections?.length
+    ? c.protections.map((p) => `<span class="rounded-full border border-line bg-void/60 px-3 py-1 font-mono text-[12px] text-muted">${esc(p)}</span>`).join('')
+    : '<span class="font-mono text-sm text-faint">none declared</span>'
+  const description = c.description && c.description.trim()
+    ? `<section class="mt-8"><h2 class="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">Description</h2><p class="whitespace-pre-wrap font-mono text-sm leading-relaxed text-ink/90">${esc(c.description)}</p></section>`
+    : ''
+  return `<main class="mx-auto max-w-4xl px-6 py-12">
+  <a href="/crackmes" class="font-mono text-xs text-faint hover:text-muted">← all crackmes</a>
+  <div class="mt-4 flex flex-wrap items-start justify-between gap-4"><div>
+    <h1 class="font-display text-4xl font-extrabold tracking-tight text-ink">${esc(c.title)}</h1>
+    <p class="mt-1 font-mono text-sm text-muted">by ${author}</p>
+  </div><a href="/api/crackmes/${encodeURIComponent(c.slug)}/download" class="btn-acid">download ↓</a></div>
+  <dl class="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 rounded-xl border border-line bg-surface/30 p-6 font-mono text-sm sm:grid-cols-4">
+    ${field('Runtime', runtimeOf(c))}${field('Language', LANGUAGE[c.language] || c.language)}${field('Difficulty', d != null ? d.toFixed(1) : '—')}${field('Quality', c.avgQuality != null ? c.avgQuality.toFixed(1) : '—')}${field('Size', fmtSize(c.sizeBytes))}${field('Downloads', String(c.downloadCount))}${field('Solved', String(c.solvedCount))}${field('Published', String(c.publishedAt || '').slice(0, 10))}
+  </dl>
+  <section class="mt-6"><h2 class="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">Protections</h2><div class="flex flex-wrap gap-2">${prots}</div></section>
+  ${description}
+</main>`
+}
+
+function profileBody(origin, p, crackmes) {
+  const authored = crackmes.length
+    ? crackmes.map((c) => `<li class="rounded-lg border border-line bg-surface/30 p-3"><a href="/challenge/${encodeURIComponent(c.slug)}" class="text-ink hover:text-acid">${esc(c.title)}</a> <span class="text-faint">${esc(DIFFLABEL[c.difficulty] ?? c.difficulty)}</span></li>`).join('')
+    : '<li class="text-faint">None yet.</li>'
+  return `<main class="mx-auto max-w-3xl px-6 py-12">
+  <h1 class="font-display text-3xl font-extrabold tracking-tight text-ink">${esc(p.displayName)}</h1>
+  <p class="mt-1 font-mono text-[12px] text-faint">@${esc(p.handle)} · ${esc(p.rankName)} · ${p.points} pts · ${p.solves} solved · ${p.authored} authored</p>
+  <h2 class="mb-3 mt-12 font-display text-2xl font-bold text-ink">Authored crackmes</h2>
+  <ul class="space-y-2 font-mono text-[13px]">${authored}</ul>
+</main>`
+}
+
 // --- Per-route head. Dynamic routes fetch their own data (the API enforces visibility, so pending/private
 // items 404 here too); a missing crackme/profile returns a 404 status so Google doesn't log a soft-404. ---
 
@@ -180,6 +266,7 @@ export async function headFor(req, { apiUrl, origin }) {
       ogType: 'article',
       robots: takenDown ? 'noindex,follow' : null,
       jsonld: takenDown ? [] : [challengeGraph(origin, c)],
+      body: challengeBody(origin, c),
     }
   }
 
@@ -188,6 +275,7 @@ export async function headFor(req, { apiUrl, origin }) {
     const handle = decodeURIComponent(m[1])
     const p = await fetchJson(`${apiUrl}/api/users/${encodeURIComponent(handle)}`)
     if (!p) return notFound(origin, req, 'User not found — BitMono')
+    const authored = (await fetchJson(`${apiUrl}/api/users/${encodeURIComponent(handle)}/crackmes`)) ?? []
     return {
       title: `${p.displayName || p.handle} (@${p.handle}) — BitMono`,
       description: `${p.displayName || p.handle} on BitMono — ${p.points} pts, ${p.solves} solved, ${p.authored} crackmes authored. Rank: ${p.rankName}.`,
@@ -196,6 +284,7 @@ export async function headFor(req, { apiUrl, origin }) {
       ogType: 'profile',
       robots: null,
       jsonld: [profileGraph(origin, p)],
+      body: profileBody(origin, p, authored),
     }
   }
 
@@ -203,6 +292,12 @@ export async function headFor(req, { apiUrl, origin }) {
   // right title instead of falling through to the generic default.
   const p = req.path.length > 1 ? req.path.replace(/\/+$/, '') : '/'
   const r = ROUTES[p] ?? { title: SITE.title, description: SITE.description }
+  let body = ''
+  if (p === '/') body = homeBody()
+  else if (p === '/crackmes') {
+    const list = await fetchJson(`${apiUrl}/api/crackmes?sort=date&pageSize=100`)
+    body = listBody(origin, list?.items ?? [])
+  }
   return {
     title: r.title,
     description: r.description,
@@ -211,13 +306,14 @@ export async function headFor(req, { apiUrl, origin }) {
     ogType: 'website',
     robots: r.noindex ? 'noindex,follow' : null,
     jsonld: p === '/' ? [homeGraph(origin)] : [],
+    body,
   }
 }
 
 function notFound(origin, req, title) {
   return {
     title, description: SITE.description, canonical: `${origin}${req.path}`,
-    image: `${origin}/og.png`, ogType: 'website', robots: 'noindex,follow', jsonld: [], status: 404,
+    image: `${origin}/og.png`, ogType: 'website', robots: 'noindex,follow', jsonld: [], status: 404, body: '',
   }
 }
 
@@ -247,10 +343,14 @@ export function injectHead(template, head, { gscToken } = {}) {
   for (const obj of head.jsonld) tags.push(jsonLd(obj))
   const block = tags.join('\n    ')
   // Function replacers: titles/descriptions with "$" are inserted verbatim (no $-substitution).
-  return template
+  let html = template
     .replace(/<title>[\s\S]*?<\/title>/, () => `<title>${esc(head.title)}</title>`)
     .replace(/<meta name="description"[^>]*>/, () => `<meta name="description" content="${escAttr(head.description)}"/>`)
     .replace('</head>', () => `    ${block}\n  </head>`)
+  // Prerendered body for crawlers + fast first paint; createRoot clears #root on mount so the client app
+  // replaces it cleanly (no duplication).
+  if (head.body) html = html.replace('<div id="root"></div>', () => `<div id="root">${head.body}</div>`)
+  return html
 }
 
 // --- Sitemap: static routes + every public crackme + the distinct author profiles, fetched live. ---
