@@ -18,7 +18,11 @@ public sealed record MyRating(byte? Difficulty, byte? Quality);
 // --- writeups (moderated solutions; each one IS a spoiler) ---
 
 public sealed record WriteupItem(
-    Guid Id, string Author, string? Title, string BodyMarkdown, bool HasAttachment, int ImageCount, int UpvoteCount, DateTime CreatedAt);
+    Guid Id, string Author, string? Title, string BodyMarkdown, bool HasAttachment, int ImageCount,
+    int UpvoteCount, int HelpedCount, bool IsAuthorPick, bool MyUpvoted, bool MyHelped, bool CanMarkHelped, bool Mine, DateTime CreatedAt);
+
+public sealed record WriteupVoteResult(int UpvoteCount, bool Upvoted);
+public sealed record WriteupHelpedResult(int HelpedCount, bool Helped);
 
 public sealed record WriteupForm
 {

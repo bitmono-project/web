@@ -513,7 +513,14 @@ export interface WriteupItem {
   title: string | null
   bodyMarkdown: string
   hasAttachment: boolean
+  imageCount: number
   upvoteCount: number
+  helpedCount: number
+  isAuthorPick: boolean
+  myUpvoted: boolean
+  myHelped: boolean
+  canMarkHelped: boolean // viewer solved this crackme and isn't the writeup's author
+  mine: boolean
   createdAt: string
 }
 
@@ -532,6 +539,23 @@ export async function getWriteups(slug: string): Promise<WriteupItem[]> {
   const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups`)
   if (!res.ok) return []
   return (await res.json()) as WriteupItem[]
+}
+
+export interface WriteupVoteResult { upvoteCount: number; upvoted: boolean }
+export async function toggleWriteupUpvote(slug: string, id: string): Promise<WriteupVoteResult | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}/upvote`, { method: 'POST' })
+  return res.ok ? ((await res.json()) as WriteupVoteResult) : null
+}
+
+export interface WriteupHelpedResult { helpedCount: number; helped: boolean }
+export async function toggleWriteupHelped(slug: string, id: string): Promise<WriteupHelpedResult | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}/helped`, { method: 'POST' })
+  return res.ok ? ((await res.json()) as WriteupHelpedResult) : null
+}
+
+// Crackme author / admin marks a writeup as the intended solution (toggles; one per crackme).
+export async function pinWriteup(slug: string, id: string): Promise<boolean> {
+  return (await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}/pin`, { method: 'POST' })).ok
 }
 
 export async function submitWriteup(slug: string, title: string, body: string, attachment: File | null): Promise<boolean> {

@@ -532,14 +532,134 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             return NotFound();
 
         // Materialize so the owned-JSON Images load with each row (EF can't count a JSON collection in SQL).
+        // Author's pick floats to top, then by upvotes, then oldest.
         var rows = await db.Solutions.AsNoTracking()
             .Where(s => s.CrackmeId == id && s.Status == SolutionStatus.Approved)
-            .OrderByDescending(s => s.UpvoteCount).ThenBy(s => s.CreatedAt)
+            .OrderByDescending(s => s.IsAuthorPick).ThenByDescending(s => s.UpvoteCount).ThenBy(s => s.CreatedAt)
             .ToListAsync(ct);
+
+        var uid = CurrentUserId();
+        var myUp = new HashSet<Guid>();
+        var myHelped = new HashSet<Guid>();
+        var solvedThis = false;
+        if (uid is not null)
+        {
+            var sids = rows.Select(s => s.Id).ToList();
+            var myVotes = await db.SolutionVotes.AsNoTracking()
+                .Where(v => v.VoterUserId == uid && sids.Contains(v.SolutionId))
+                .Select(v => new { v.SolutionId, v.Kind }).ToListAsync(ct);
+            myUp = myVotes.Where(v => v.Kind == SolutionVoteKind.Upvote).Select(v => v.SolutionId).ToHashSet();
+            myHelped = myVotes.Where(v => v.Kind == SolutionVoteKind.HelpedSolve).Select(v => v.SolutionId).ToHashSet();
+            solvedThis = await db.Solves.AsNoTracking().AnyAsync(x => x.UserId == uid && x.CrackmeId == id, ct);
+        }
+
         var writeups = rows.Select(s => new WriteupItem(
             s.Id, s.AnonymousHandle ?? AppConstants.AnonymousHandle, s.Title, s.BodyMarkdown,
-            s.HasAttachment, s.Images.Count, s.UpvoteCount, s.CreatedAt)).ToList();
+            s.HasAttachment, s.Images.Count, s.UpvoteCount, s.HelpedCount, s.IsAuthorPick,
+            myUp.Contains(s.Id), myHelped.Contains(s.Id),
+            solvedThis && uid is not null && s.AuthorUserId != uid, uid is not null && s.AuthorUserId == uid,
+            s.CreatedAt)).ToList();
         return Ok(writeups);
+    }
+
+    // --- writeup feedback: upvote (anyone), "helped me solve it" (verified solvers), author's intended pick ---
+
+    [HttpPost("{slug}/writeups/{id:guid}/upvote")]
+    [Authorize]
+    [EnableRateLimiting("comment")]
+    public async Task<IActionResult> ToggleWriteupUpvote(string slug, Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
+        if (s is null)
+            return NotFound();
+        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        if (s.AuthorUserId == uid)
+            return BadRequest("You can't upvote your own writeup.");
+
+        var existing = await db.SolutionVotes
+            .FirstOrDefaultAsync(v => v.SolutionId == id && v.VoterUserId == uid && v.Kind == SolutionVoteKind.Upvote, ct);
+        bool upvoted;
+        if (existing is not null)
+        {
+            db.SolutionVotes.Remove(existing);
+            s.UpvoteCount = Math.Max(0, s.UpvoteCount - 1);
+            upvoted = false;
+        }
+        else
+        {
+            db.SolutionVotes.Add(new SolutionVote { Id = Guid.NewGuid(), SolutionId = id, VoterUserId = uid, Kind = SolutionVoteKind.Upvote, CreatedAt = DateTime.UtcNow });
+            s.UpvoteCount++;
+            upvoted = true;
+        }
+        await db.SaveChangesAsync(ct);
+        return Ok(new WriteupVoteResult(s.UpvoteCount, upvoted));
+    }
+
+    [HttpPost("{slug}/writeups/{id:guid}/helped")]
+    [Authorize]
+    [EnableRateLimiting("comment")]
+    public async Task<IActionResult> ToggleWriteupHelped(string slug, Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
+        if (s is null)
+            return NotFound();
+        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        if (s.AuthorUserId == uid)
+            return BadRequest("You can't mark your own writeup.");
+        // Solver-gated: only people who actually solved this crackme can vouch that a writeup helped.
+        var solved = await db.Solves.AsNoTracking().AnyAsync(x => x.UserId == uid && x.CrackmeId == s.CrackmeId, ct);
+        if (!solved)
+            return BadRequest("Only solvers of this crackme can mark a writeup as helpful.");
+
+        var existing = await db.SolutionVotes
+            .FirstOrDefaultAsync(v => v.SolutionId == id && v.VoterUserId == uid && v.Kind == SolutionVoteKind.HelpedSolve, ct);
+        bool helped;
+        if (existing is not null)
+        {
+            db.SolutionVotes.Remove(existing);
+            s.HelpedCount = Math.Max(0, s.HelpedCount - 1);
+            helped = false;
+        }
+        else
+        {
+            db.SolutionVotes.Add(new SolutionVote { Id = Guid.NewGuid(), SolutionId = id, VoterUserId = uid, Kind = SolutionVoteKind.HelpedSolve, CreatedAt = DateTime.UtcNow });
+            s.HelpedCount++;
+            helped = true;
+        }
+        await db.SaveChangesAsync(ct);
+        return Ok(new WriteupHelpedResult(s.HelpedCount, helped));
+    }
+
+    // The crackme author (or an admin) marks one writeup as the intended/canonical solution. Toggles; one per crackme.
+    [HttpPost("{slug}/writeups/{id:guid}/pin")]
+    [Authorize]
+    public async Task<IActionResult> PinWriteup(string slug, Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.Include(x => x.Crackme).FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
+        if (s is null)
+            return NotFound();
+        if (s.Crackme.UploaderUserId != CurrentUserId() && !User.IsInRole(nameof(UserRole.Admin)))
+            return Forbid();
+
+        if (s.IsAuthorPick)
+        {
+            s.IsAuthorPick = false;
+        }
+        else
+        {
+            var current = await db.Solutions.Where(x => x.CrackmeId == s.CrackmeId && x.IsAuthorPick).ToListAsync(ct);
+            foreach (var o in current)
+                o.IsAuthorPick = false;
+            s.IsAuthorPick = true;
+        }
+        await db.SaveChangesAsync(ct);
+        return NoContent();
     }
 
     [HttpPost("{slug}/writeups")]

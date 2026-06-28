@@ -28,6 +28,8 @@ public class Solution
     public List<SolutionImage> Images { get; set; } = [];
 
     public int UpvoteCount { get; set; }
+    public int HelpedCount { get; set; }      // "helped me solve it" votes (solver-gated)
+    public bool IsAuthorPick { get; set; }    // the crackme author's "intended solution"
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

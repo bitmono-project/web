@@ -12,6 +12,9 @@ public enum Difficulty { VeryEasy = 1, Easy, Medium, Hard, VeryHard, Insane }
 
 public enum SolutionStatus { Pending, Approved, Rejected, Hidden }
 
+// Per-user signal on a writeup. Append-only — stored as int.
+public enum SolutionVoteKind { Upvote, HelpedSolve }
+
 // Mirrors Safeturned's AdminVerdict shape, retuned for the gallery lifecycle.
 // Append-only (stored as int) — Restored marks an undo of a takedown, distinct from a first-time Approved.
 public enum ModerationVerdict { None, Approved, Suspicious, Malware, Disallowed, Spam, FalsePositive, TakenDown, Restored }

@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   type CrackmeDetail as Detail, type CommentItem, type MyRating, type WriteupItem, type ReactionSummary,
   getCrackme, getComments, postComment, getMyRating, rateCrackme,
-  getWriteups, submitWriteup, writeupAttachmentUrl,
+  getWriteups, submitWriteup, writeupAttachmentUrl, toggleWriteupUpvote, toggleWriteupHelped, pinWriteup,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
   REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
   type ModerationEvent, getModerationHistory,
@@ -126,7 +126,7 @@ export default function CrackmeDetail() {
       <ModerationHistory slug={c.slug} />
 
       <RatingsPanel slug={c.slug} me={me} initial={c} />
-      <WriteupsPanel slug={c.slug} me={me} zipPassword={zipPassword} />
+      <WriteupsPanel slug={c.slug} me={me} isOwner={c.isOwner} zipPassword={zipPassword} />
       <CommentsPanel slug={c.slug} me={me} commentReactionsEnabled={c.commentReactionsEnabled} />
       {c.isOwner && (
         <>
@@ -498,7 +498,7 @@ function CommentsPanel({ slug, me, commentReactionsEnabled }: { slug: string; me
   )
 }
 
-function WriteupsPanel({ slug, me, zipPassword }: { slug: string; me: Me | null; zipPassword: string }) {
+function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: Me | null; isOwner: boolean; zipPassword: string }) {
   const [writeups, setWriteups] = useState<WriteupItem[]>([])
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [open, setOpen] = useState(false)
@@ -507,7 +507,8 @@ function WriteupsPanel({ slug, me, zipPassword }: { slug: string; me: Me | null;
   const [file, setFile] = useState<File | null>(null)
   const [phase, setPhase] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
 
-  useEffect(() => { getWriteups(slug).then(setWriteups) }, [slug])
+  const load = () => getWriteups(slug).then(setWriteups)
+  useEffect(() => { load() }, [slug])
 
   const send = async () => {
     if (!body.trim()) return
@@ -515,6 +516,20 @@ function WriteupsPanel({ slug, me, zipPassword }: { slug: string; me: Me | null;
     const ok = await submitWriteup(slug, title, body.trim(), file)
     setPhase(ok ? 'done' : 'error')
     if (ok) { setTitle(''); setBody(''); setFile(null); setOpen(false) }
+  }
+
+  const patch = (id: string, p: Partial<WriteupItem>) =>
+    setWriteups((ws) => ws.map((w) => (w.id === id ? { ...w, ...p } : w)))
+  const upvote = async (w: WriteupItem) => {
+    const r = await toggleWriteupUpvote(slug, w.id)
+    if (r) patch(w.id, { upvoteCount: r.upvoteCount, myUpvoted: r.upvoted })
+  }
+  const markHelped = async (w: WriteupItem) => {
+    const r = await toggleWriteupHelped(slug, w.id)
+    if (r) patch(w.id, { helpedCount: r.helpedCount, myHelped: r.helped })
+  }
+  const pin = async (w: WriteupItem) => {
+    if (await pinWriteup(slug, w.id)) load() // pin reorders + clears the previous pick — re-fetch
   }
 
   return (
@@ -548,9 +563,10 @@ function WriteupsPanel({ slug, me, zipPassword }: { slug: string; me: Me | null;
       <div className="space-y-3">
         {writeups.length === 0 && <p className="font-mono text-[13px] text-faint">No writeups yet — be the first.</p>}
         {writeups.map((w) => (
-          <div key={w.id} className="rounded-lg border border-line bg-surface/30 p-4">
-            <div className="flex items-center justify-between font-mono text-[11px] text-faint">
-              <span>{w.title ?? 'Writeup'} · {w.author} · {formatDate(w.createdAt)}</span>
+          <div key={w.id} className={`rounded-lg border bg-surface/30 p-4 ${w.isAuthorPick ? 'border-acid/50' : 'border-line'}`}>
+            <div className="font-mono text-[11px] text-faint">
+              {w.isAuthorPick && <span className="mr-2 rounded border border-acid/50 px-1.5 py-px text-[10px] uppercase tracking-wider text-acid">★ intended solution</span>}
+              {w.title ?? 'Writeup'} · {w.author} · {formatDate(w.createdAt)}
             </div>
             {revealed.has(w.id) ? (
               <>
@@ -566,6 +582,38 @@ function WriteupsPanel({ slug, me, zipPassword }: { slug: string; me: Me | null;
                 [full solution — click to reveal spoiler]
               </button>
             )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[12px]">
+              <button
+                onClick={() => upvote(w)}
+                disabled={!me || w.mine}
+                title={w.mine ? 'your writeup' : !me ? 'sign in to upvote' : 'upvote'}
+                className={`rounded-full border px-2.5 py-1 transition-colors ${w.myUpvoted ? 'border-acid bg-acid/15 text-acid' : 'border-line text-muted'} ${me && !w.mine ? 'hover:border-acid hover:text-acid' : 'cursor-not-allowed opacity-60'}`}
+              >
+                ▲ {w.upvoteCount}
+              </button>
+
+              {w.canMarkHelped ? (
+                <button
+                  onClick={() => markHelped(w)}
+                  title="You solved this — vouch that this writeup helped"
+                  className={`rounded-full border px-2.5 py-1 transition-colors ${w.myHelped ? 'border-acid bg-acid/15 text-acid' : 'border-line text-muted hover:border-acid hover:text-acid'}`}
+                >
+                  ✓ helped{w.helpedCount > 0 && ` · ${w.helpedCount}`}
+                </button>
+              ) : w.helpedCount > 0 && (
+                <span className="rounded-full border border-line px-2.5 py-1 text-faint" title="solvers who said this helped">✓ {w.helpedCount} helped</span>
+              )}
+
+              {isOwner && (
+                <button
+                  onClick={() => pin(w)}
+                  className={`ml-auto rounded-full border px-2.5 py-1 transition-colors ${w.isAuthorPick ? 'border-acid text-acid' : 'border-line text-faint hover:border-acid hover:text-acid'}`}
+                >
+                  {w.isAuthorPick ? 'unpin' : 'pin as intended'}
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
