@@ -41,7 +41,7 @@ public sealed record CrackmeListResponse(IReadOnlyList<CrackmeListItem> Items, i
 
 // One public entry in a crackme's takedown/restore history. Moderator is the real name only when the
 // viewer is an admin; otherwise it's null and the UI shows "a moderator".
-public sealed record ModerationEvent(ModerationEventAction Action, string? Reason, DateTime At, string? Moderator);
+public sealed record ModerationEvent(ModerationEventAction Action, string? Reason, DateTime At, string? Moderator, string? ModeratorHandle);
 
 public sealed record CrackmeDetail(
     Guid Id,

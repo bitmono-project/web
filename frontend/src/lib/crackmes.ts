@@ -363,13 +363,14 @@ export async function restoreCrackme(id: string, reason: string): Promise<boolea
   })).ok
 }
 
-// Public takedown/restore trail for a crackme. `moderator` is a real name only for admin viewers;
-// otherwise null and the UI shows "a moderator".
+// Public takedown/restore trail for a crackme. `moderator`/`moderatorHandle` are set only for admin
+// viewers (real name + profile link); otherwise null and the UI shows "a moderator".
 export interface ModerationEvent {
   action: 'takenDown' | 'restored'
   reason: string | null
   at: string
   moderator: string | null
+  moderatorHandle: string | null
 }
 
 export async function getModerationHistory(slug: string): Promise<ModerationEvent[]> {

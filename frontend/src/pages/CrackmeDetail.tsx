@@ -229,7 +229,12 @@ function ModEvent({ e }: { e: ModerationEvent }) {
         <span className={`font-bold uppercase tracking-wider ${down ? 'text-red-400' : 'text-acid'}`}>
           {down ? 'Taken down' : 'Restored'}
         </span>
-        <span className="text-faint">{formatDate(e.at)} · {e.moderator ?? 'a moderator'}</span>
+        <span className="text-faint">
+          {formatDate(e.at)} ·{' '}
+          {e.moderatorHandle
+            ? <Link to={`/user/${e.moderatorHandle}`} className="transition-colors hover:text-acid">{e.moderator}</Link>
+            : (e.moderator ?? 'a moderator')}
+        </span>
       </div>
       {e.reason && <p className="mt-1 font-mono text-[13px] leading-relaxed text-ink/80">“{e.reason}”</p>}
     </li>

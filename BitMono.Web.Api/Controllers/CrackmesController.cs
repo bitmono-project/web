@@ -148,20 +148,26 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             .ToListAsync(ct);
 
         var isAdmin = User.IsInRole(nameof(UserRole.Admin));
-        var names = new Dictionary<Guid, string>();
+        // Admins see the moderator's real name + a profile link; everyone else sees "a moderator".
+        var users = new Dictionary<Guid, (string Name, string? Handle)>();
         if (isAdmin && rows.Count > 0)
         {
             var ids = rows.Select(r => r.ReviewerId).Distinct().ToList();
-            names = await db.Users.AsNoTracking()
+            users = await db.Users.AsNoTracking()
                 .Where(u => ids.Contains(u.Id))
-                .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+                .ToDictionaryAsync(u => u.Id, u => (u.DisplayName, u.Handle), ct);
         }
 
-        var events = rows.Select(r => new ModerationEvent(
-            r.IsTakedown ? ModerationEventAction.TakenDown : ModerationEventAction.Restored,
-            r.IsTakedown ? r.TakedownReason : r.PublicMessage,
-            r.CreatedAt,
-            isAdmin && names.TryGetValue(r.ReviewerId, out var n) ? n : null)).ToList();
+        var events = rows.Select(r =>
+        {
+            string? name = null, handle = null;
+            if (isAdmin && users.TryGetValue(r.ReviewerId, out var u))
+                (name, handle) = u;
+            return new ModerationEvent(
+                r.IsTakedown ? ModerationEventAction.TakenDown : ModerationEventAction.Restored,
+                r.IsTakedown ? r.TakedownReason : r.PublicMessage,
+                r.CreatedAt, name, handle);
+        }).ToList();
 
         return Ok(events);
     }
