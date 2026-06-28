@@ -12,7 +12,7 @@ import {
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate, statusLabel,
 } from '../lib/crackmes'
 import { type Me, isAdmin, isModerator, useAuth } from '../lib/auth'
-import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
+import { PromptDialog, ConfirmDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
 import { ImageGallery } from '../components/ImageGallery'
 import { Turnstile } from '../components/Turnstile'
 import { getConfig } from '../lib/config'
@@ -438,6 +438,7 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
   const [busy, setBusy] = useState(false)
   const [captcha, setCaptcha] = useState<string | null>(null)
   const [tsKey, setTsKey] = useState(0)
+  const [confirmDel, setConfirmDel] = useState<string | null>(null)
   const [locked, setLocked] = useState(commentsLocked)
   const isMod = isModerator(me)
 
@@ -506,7 +507,7 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
                     : cm.author} · {formatDate(cm.createdAt)}{cm.edited && <button onClick={() => showHistory(cm.id)} className="ml-1 transition-colors hover:text-acid">· edited</button>}</span>
                   <span className="flex gap-2">
                     {cm.mine && editing !== cm.id && <button onClick={() => startEdit(cm)} className="transition-colors hover:text-acid">edit</button>}
-                    {cm.mine && <button onClick={() => del(cm.id)} className="transition-colors hover:text-red-400">delete</button>}
+                    {cm.mine && <button onClick={() => setConfirmDel(cm.id)} className="transition-colors hover:text-red-400">delete</button>}
                     {isMod && <button onClick={() => hide(cm.id)} title="hide comment" className="transition-colors hover:text-red-400">hide</button>}
                   </span>
                 </div>
@@ -573,6 +574,17 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
           <Link to={`/login?returnUrl=/challenge/${slug}`} className="text-acid hover:underline">Sign in</Link> to comment.
         </p>
       )}
+
+      {confirmDel && (
+        <ConfirmDialog
+          title="Delete comment"
+          message="This replaces your comment with a deleted marker — you can't undo it."
+          confirmText="delete"
+          danger
+          onConfirm={() => { del(confirmDel); setConfirmDel(null) }}
+          onCancel={() => setConfirmDel(null)}
+        />
+      )}
     </div>
   )
 }
@@ -588,6 +600,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
   const [phase, setPhase] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [wCaptcha, setWCaptcha] = useState<string | null>(null)
   const [wTsKey, setWTsKey] = useState(0)
+  const [confirmDelW, setConfirmDelW] = useState<string | null>(null)
 
   const load = () => getWriteups(slug).then(setWriteups)
   useEffect(() => { load() }, [slug])
@@ -633,8 +646,8 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
       setWEditing(null)
     }
   }
-  const delW = async (w: WriteupItem) => {
-    if (await deleteWriteup(slug, w.id)) setWriteups((ws) => ws.filter((x) => x.id !== w.id))
+  const delW = async (id: string) => {
+    if (await deleteWriteup(slug, id)) setWriteups((ws) => ws.filter((x) => x.id !== id))
   }
 
   return (
@@ -738,7 +751,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
               )}
 
               {w.mine && wEditing !== w.id && <button onClick={() => startWEdit(w)} className="rounded-full border border-line px-2.5 py-1 text-muted transition-colors hover:border-acid hover:text-acid">edit</button>}
-              {w.mine && <button onClick={() => delW(w)} className="rounded-full border border-line px-2.5 py-1 text-faint transition-colors hover:border-red-400 hover:text-red-400">delete</button>}
+              {w.mine && <button onClick={() => setConfirmDelW(w.id)} className="rounded-full border border-line px-2.5 py-1 text-faint transition-colors hover:border-red-400 hover:text-red-400">delete</button>}
               {isOwner && (
                 <button
                   onClick={() => pin(w)}
@@ -755,6 +768,17 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
       {!me && <p className="mt-3 font-mono text-[13px] text-muted">
         <Link to={`/login?returnUrl=/challenge/${slug}`} className="text-acid hover:underline">Sign in</Link> to submit a writeup.
       </p>}
+
+      {confirmDelW && (
+        <ConfirmDialog
+          title="Delete writeup"
+          message="This permanently removes your writeup from the gallery."
+          confirmText="delete"
+          danger
+          onConfirm={() => { delW(confirmDelW); setConfirmDelW(null) }}
+          onCancel={() => setConfirmDelW(null)}
+        />
+      )}
     </div>
   )
 }
