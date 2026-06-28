@@ -10,7 +10,7 @@ public enum SourceLanguage { CSharp, FSharp, VbNet, Cpp, Other }
 // 1–6, crackmes.one scale (Very Easy → Insane). Author claims one; community averages refine it.
 public enum Difficulty { VeryEasy = 1, Easy, Medium, Hard, VeryHard, Insane }
 
-public enum SolutionStatus { Pending, Approved, Rejected, Hidden }
+public enum SolutionStatus { Pending, Approved, Rejected, Hidden, Deleted }
 
 // Per-user signal on a writeup. Append-only — stored as int.
 public enum SolutionVoteKind { Upvote, HelpedSolve }

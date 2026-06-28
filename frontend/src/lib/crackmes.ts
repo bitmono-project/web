@@ -427,6 +427,9 @@ export interface CommentItem {
   authorHandle: string | null
   body: string
   isSpoiler: boolean
+  isDeleted: boolean
+  edited: boolean
+  mine: boolean
   createdAt: string
   reactions: Record<string, number>
   myReactions: string[]
@@ -499,6 +502,21 @@ export async function postComment(slug: string, body: string, isSpoiler: boolean
   return (await res.json()) as CommentItem
 }
 
+export async function editComment(slug: string, id: string, body: string, isSpoiler: boolean): Promise<boolean> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/comments/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body, isSpoiler }),
+  })
+  return res.ok
+}
+export async function deleteComment(slug: string, id: string): Promise<boolean> {
+  return (await fetch(`/api/crackmes/${encodeURIComponent(slug)}/comments/${id}`, { method: 'DELETE' })).ok
+}
+export interface CommentEditItem { body: string; editedAt: string }
+export async function getCommentHistory(slug: string, id: string): Promise<CommentEditItem[]> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/comments/${id}/history`)
+  return res.ok ? ((await res.json()) as CommentEditItem[]) : []
+}
+
 export async function getMyRating(slug: string): Promise<MyRating | null> {
   const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/my-rating`)
   if (!res.ok) return null
@@ -567,6 +585,16 @@ export async function toggleWriteupHelped(slug: string, id: string): Promise<Wri
 // Crackme author / admin marks a writeup as the intended solution (toggles; one per crackme).
 export async function pinWriteup(slug: string, id: string): Promise<boolean> {
   return (await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}/pin`, { method: 'POST' })).ok
+}
+
+export async function editWriteup(slug: string, id: string, title: string, body: string): Promise<boolean> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.trim() || null, bodyMarkdown: body }),
+  })
+  return res.ok
+}
+export async function deleteWriteup(slug: string, id: string): Promise<boolean> {
+  return (await fetch(`/api/crackmes/${encodeURIComponent(slug)}/writeups/${id}`, { method: 'DELETE' })).ok
 }
 
 export async function submitWriteup(slug: string, title: string, body: string, attachment: File | null, images: File[] = []): Promise<boolean> {

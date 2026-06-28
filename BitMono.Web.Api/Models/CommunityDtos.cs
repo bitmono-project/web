@@ -3,10 +3,13 @@ using Microsoft.AspNetCore.Http;
 namespace BitMono.Web.Api.Models;
 
 public sealed record CommentItem(
-    Guid Id, string Author, string? AuthorHandle, string Body, bool IsSpoiler, DateTime CreatedAt,
+    Guid Id, string Author, string? AuthorHandle, string Body, bool IsSpoiler, bool IsDeleted, bool Edited, bool Mine, DateTime CreatedAt,
     IReadOnlyDictionary<string, int> Reactions, IReadOnlyList<string> MyReactions);
 
 public sealed record CommentCreateRequest(string Body, bool IsSpoiler);
+public sealed record CommentUpdateRequest(string Body, bool IsSpoiler);
+public sealed record CommentEditItem(string Body, DateTime EditedAt);
+public sealed record WriteupUpdateRequest(string? Title, string BodyMarkdown);
 
 public sealed record RatingRequest(byte Difficulty, byte Quality);
 

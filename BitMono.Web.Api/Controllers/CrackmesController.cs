@@ -325,9 +325,9 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             return NotFound();
 
         var rows = await db.Comments.AsNoTracking()
-            .Where(c => c.CrackmeId == id && !c.IsDeleted && !c.IsHidden)
+            .Where(c => c.CrackmeId == id && !c.IsHidden)
             .OrderBy(c => c.CreatedAt)
-            .Select(c => new CommentRow(c.Id, c.AnonymousHandle, c.AuthorUserId, c.Body, c.IsSpoiler, c.CreatedAt))
+            .Select(c => new CommentRow(c.Id, c.AnonymousHandle, c.AuthorUserId, c.Body, c.IsSpoiler, c.IsDeleted, c.CreatedAt, c.UpdatedAt))
             .ToListAsync(ct);
 
         var ids = rows.Select(r => r.Id).ToList();
@@ -350,7 +350,10 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
                 ? []
                 : rs.Where(x => x.UserId == uid).Select(x => x.Emoji).ToList();
             var handle = r.AuthorUserId is { } au && handles.TryGetValue(au, out var h) ? h : null;
-            return new CommentItem(r.Id, r.Author ?? AppConstants.AnonymousHandle, handle, r.Body, r.IsSpoiler, r.CreatedAt, counts, myReactions);
+            var mine = uid is not null && r.AuthorUserId == uid;
+            return new CommentItem(r.Id, r.Author ?? AppConstants.AnonymousHandle, handle,
+                r.IsDeleted ? "" : r.Body, !r.IsDeleted && r.IsSpoiler, r.IsDeleted, r.UpdatedAt != r.CreatedAt, mine,
+                r.CreatedAt, counts, myReactions);
         }).ToList();
         return Ok(items);
     }
@@ -397,8 +400,71 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         catch { }
         var authorHandle = await db.Users.AsNoTracking()
             .Where(u => u.Id == comment.AuthorUserId).Select(u => u.Handle).FirstOrDefaultAsync(ct);
-        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, authorHandle, comment.Body, comment.IsSpoiler, comment.CreatedAt,
+        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, authorHandle, comment.Body, comment.IsSpoiler, false, false, true, comment.CreatedAt,
             new Dictionary<string, int>(), []));
+    }
+
+    // Author edits their own comment — the prior body is kept in CommentEdit history.
+    [HttpPut("{slug}/comments/{id:guid}")]
+    [Authorize]
+    [EnableRateLimiting("comment")]
+    public async Task<IActionResult> EditComment(string slug, Guid id, [FromBody] CommentUpdateRequest req, CancellationToken ct)
+    {
+        var body = req.Body?.Trim();
+        if (string.IsNullOrEmpty(body))
+            return BadRequest("Comment can't be empty.");
+        if (body.Length > 4000)
+            body = body[..4000];
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Comments.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct);
+        if (c is null)
+            return NotFound();
+        if (c.AuthorUserId != CurrentUserId())
+            return Forbid();
+
+        if (c.Body != body)
+        {
+            db.CommentEdits.Add(new CommentEdit { Id = Guid.NewGuid(), CommentId = c.Id, Body = c.Body, EditedAt = DateTime.UtcNow });
+            c.Body = body;
+        }
+        c.IsSpoiler = req.IsSpoiler;
+        c.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    // Author soft-deletes their own comment — kept in the thread as a tombstone (body blanked).
+    [HttpDelete("{slug}/comments/{id:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteComment(string slug, Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Comments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (c is null)
+            return NotFound();
+        if (c.AuthorUserId != CurrentUserId())
+            return Forbid();
+        c.IsDeleted = true;
+        c.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    // Public edit history for a comment (prior versions, newest first).
+    [HttpGet("{slug}/comments/{id:guid}/history")]
+    public async Task<IActionResult> CommentHistory(string slug, Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var edits = await db.CommentEdits.AsNoTracking()
+            .Where(e => e.CommentId == id)
+            .OrderByDescending(e => e.EditedAt)
+            .Select(e => new CommentEditItem(e.Body, e.EditedAt))
+            .ToListAsync(ct);
+        return Ok(edits);
     }
 
     [HttpGet("{slug}/my-rating")]
@@ -748,6 +814,49 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         }
         catch { }
         return Accepted(new WriteupResponse(id, "pending"));
+    }
+
+    // Author edits their own writeup (stays live — moderation/report still covers abuse).
+    [HttpPut("{slug}/writeups/{id:guid}")]
+    [Authorize]
+    public async Task<IActionResult> EditWriteup(string slug, Guid id, [FromBody] WriteupUpdateRequest req, CancellationToken ct)
+    {
+        var body = req.BodyMarkdown?.Trim();
+        if (string.IsNullOrEmpty(body))
+            return BadRequest("Writeup body is required.");
+        if (body.Length > 40000)
+            body = body[..40000];
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
+        if (s is null)
+            return NotFound();
+        if (s.AuthorUserId != CurrentUserId())
+            return Forbid();
+        s.Title = string.IsNullOrWhiteSpace(req.Title) ? null : req.Title.Trim();
+        s.BodyMarkdown = body;
+        s.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    // Author soft-deletes their own writeup.
+    [HttpDelete("{slug}/writeups/{id:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteWriteup(string slug, Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (s is null)
+            return NotFound();
+        if (s.AuthorUserId != CurrentUserId())
+            return Forbid();
+        s.Status = SolutionStatus.Deleted;
+        s.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
     }
 
     [HttpGet("{slug}/writeups/{id:guid}/attachment")]

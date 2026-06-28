@@ -2,9 +2,9 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  type CrackmeDetail as Detail, type CommentItem, type MyRating, type WriteupItem, type ReactionSummary,
-  getCrackme, getComments, postComment, hideComment, setCommentsLock, getMyRating, rateCrackme,
-  getWriteups, submitWriteup, writeupAttachmentUrl, writeupImageUrl, toggleWriteupUpvote, toggleWriteupHelped, pinWriteup,
+  type CrackmeDetail as Detail, type CommentItem, type CommentEditItem, type MyRating, type WriteupItem, type ReactionSummary,
+  getCrackme, getComments, postComment, editComment, deleteComment, getCommentHistory, hideComment, setCommentsLock, getMyRating, rateCrackme,
+  getWriteups, submitWriteup, writeupAttachmentUrl, writeupImageUrl, toggleWriteupUpvote, toggleWriteupHelped, pinWriteup, editWriteup, deleteWriteup,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
   REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
   type ModerationEvent, getModerationHistory,
@@ -458,6 +458,28 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
     if (r !== null) setLocked(r)
   }
 
+  const [editing, setEditing] = useState<string | null>(null)
+  const [editBody, setEditBody] = useState('')
+  const [editSpoiler, setEditSpoiler] = useState(false)
+  const [history, setHistory] = useState<Record<string, CommentEditItem[]>>({})
+
+  const startEdit = (cm: CommentItem) => { setEditing(cm.id); setEditBody(cm.body); setEditSpoiler(cm.isSpoiler) }
+  const saveEdit = async (id: string) => {
+    if (await editComment(slug, id, editBody.trim(), editSpoiler)) {
+      setComments((xs) => xs.map((x) => (x.id === id ? { ...x, body: editBody.trim(), isSpoiler: editSpoiler, edited: true } : x)))
+      setEditing(null)
+    }
+  }
+  const del = async (id: string) => {
+    if (await deleteComment(slug, id)) setComments((xs) => xs.map((x) => (x.id === id ? { ...x, isDeleted: true } : x)))
+  }
+  const showHistory = async (id: string) => {
+    if (history[id]) { setHistory((cur) => Object.fromEntries(Object.entries(cur).filter(([k]) => k !== id))); return }
+    setHistory((cur) => ({ ...cur, [id]: [] }))   // show the box while loading
+    const h = await getCommentHistory(slug, id)
+    setHistory((cur) => ({ ...cur, [id]: h }))
+  }
+
   return (
     <div className="mt-10">
       <div className="mb-3 flex items-center justify-between">
@@ -469,19 +491,53 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
         {comments.length === 0 && <p className="font-mono text-[13px] text-faint">No comments yet.</p>}
         {comments.map((cm) => (
           <div key={cm.id} className="rounded-lg border border-line bg-surface/30 p-3">
-            <div className="flex items-center justify-between font-mono text-[11px] text-faint">
-              <span>{cm.authorHandle
-                ? <Link to={`/user/${cm.authorHandle}`} className="transition-colors hover:text-acid">{cm.author}</Link>
-                : cm.author} · {formatDate(cm.createdAt)}</span>
-              {isMod && <button onClick={() => hide(cm.id)} title="hide comment" className="text-faint transition-colors hover:text-red-400">hide</button>}
-            </div>
-            {cm.isSpoiler && !revealed.has(cm.id)
-              ? <button onClick={() => setRevealed((s) => new Set(s).add(cm.id))} className="mt-1 font-mono text-[13px] text-acid hover:underline">[spoiler — click to reveal]</button>
-              : <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{cm.body}</p>}
-            {commentReactionsEnabled && (
-              <div className="mt-2">
-                <ReactionBar initialCounts={cm.reactions} initialMine={cm.myReactions} canReact={!!me} toggle={(e) => toggleCommentReaction(cm.id, e)} />
-              </div>
+            {cm.isDeleted ? (
+              <p className="font-mono text-[12px] italic text-faint">// comment deleted by its author</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-faint">
+                  <span>{cm.authorHandle
+                    ? <Link to={`/user/${cm.authorHandle}`} className="transition-colors hover:text-acid">{cm.author}</Link>
+                    : cm.author} · {formatDate(cm.createdAt)}{cm.edited && <button onClick={() => showHistory(cm.id)} className="ml-1 transition-colors hover:text-acid">· edited</button>}</span>
+                  <span className="flex gap-2">
+                    {cm.mine && editing !== cm.id && <button onClick={() => startEdit(cm)} className="transition-colors hover:text-acid">edit</button>}
+                    {cm.mine && <button onClick={() => del(cm.id)} className="transition-colors hover:text-red-400">delete</button>}
+                    {isMod && <button onClick={() => hide(cm.id)} title="hide comment" className="transition-colors hover:text-red-400">hide</button>}
+                  </span>
+                </div>
+                {editing === cm.id ? (
+                  <div className="mt-2">
+                    <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} maxLength={4000}
+                      className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid" />
+                    <div className="mt-1 flex items-center gap-3">
+                      <label className="flex items-center gap-2 font-mono text-[12px] text-muted">
+                        <input type="checkbox" checked={editSpoiler} onChange={(e) => setEditSpoiler(e.target.checked)} /> spoiler
+                      </label>
+                      <button onClick={() => setEditing(null)} className="font-mono text-[12px] text-faint hover:text-ink">cancel</button>
+                      <button onClick={() => saveEdit(cm.id)} disabled={!editBody.trim()} className="btn-acid ml-auto px-3 py-1 text-[12px] disabled:opacity-50">save</button>
+                    </div>
+                  </div>
+                ) : cm.isSpoiler && !revealed.has(cm.id) ? (
+                  <button onClick={() => setRevealed((s) => new Set(s).add(cm.id))} className="mt-1 font-mono text-[13px] text-acid hover:underline">[spoiler — click to reveal]</button>
+                ) : (
+                  <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{cm.body}</p>
+                )}
+                {history[cm.id] && (
+                  <div className="mt-2 space-y-1 rounded border border-line bg-void/40 p-2">
+                    <div className="font-mono text-[10px] uppercase tracking-wider text-faint">edit history</div>
+                    {history[cm.id].length === 0
+                      ? <p className="font-mono text-[12px] text-faint">no prior versions.</p>
+                      : history[cm.id].map((h, i) => (
+                        <p key={i} className="whitespace-pre-wrap font-mono text-[12px] text-muted"><span className="text-faint">{formatDate(h.editedAt)} — </span>{h.body}</p>
+                      ))}
+                  </div>
+                )}
+                {commentReactionsEnabled && (
+                  <div className="mt-2">
+                    <ReactionBar initialCounts={cm.reactions} initialMine={cm.myReactions} canReact={!!me} toggle={(e) => toggleCommentReaction(cm.id, e)} />
+                  </div>
+                )}
+              </>
             )}
           </div>
         ))}
@@ -558,6 +614,20 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: M
     if (await pinWriteup(slug, w.id)) load() // pin reorders + clears the previous pick — re-fetch
   }
 
+  const [wEditing, setWEditing] = useState<string | null>(null)
+  const [wTitle, setWTitle] = useState('')
+  const [wBody, setWBody] = useState('')
+  const startWEdit = (w: WriteupItem) => { setWEditing(w.id); setWTitle(w.title ?? ''); setWBody(w.bodyMarkdown) }
+  const saveWEdit = async (id: string) => {
+    if (await editWriteup(slug, id, wTitle, wBody.trim())) {
+      setWriteups((ws) => ws.map((w) => (w.id === id ? { ...w, title: wTitle.trim() || null, bodyMarkdown: wBody.trim() } : w)))
+      setWEditing(null)
+    }
+  }
+  const delW = async (w: WriteupItem) => {
+    if (await deleteWriteup(slug, w.id)) setWriteups((ws) => ws.filter((x) => x.id !== w.id))
+  }
+
   return (
     <div className="mt-10">
       <div className="mb-3 flex items-center justify-between">
@@ -608,7 +678,18 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: M
               {w.isAuthorPick && <span className="mr-2 rounded border border-acid/50 px-1.5 py-px text-[10px] uppercase tracking-wider text-acid">★ intended solution</span>}
               {w.title ?? 'Writeup'} · {w.author} · {formatDate(w.createdAt)}
             </div>
-            {revealed.has(w.id) ? (
+            {wEditing === w.id ? (
+              <div className="mt-2">
+                <input value={wTitle} onChange={(e) => setWTitle(e.target.value)} maxLength={150} placeholder="title (optional)"
+                  className="mb-2 w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid" />
+                <textarea value={wBody} onChange={(e) => setWBody(e.target.value)} rows={8} maxLength={40000}
+                  className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid" />
+                <div className="mt-1 flex gap-3">
+                  <button onClick={() => setWEditing(null)} className="font-mono text-[12px] text-faint hover:text-ink">cancel</button>
+                  <button onClick={() => saveWEdit(w.id)} disabled={!wBody.trim()} className="btn-acid ml-auto px-3 py-1 text-[12px] disabled:opacity-50">save</button>
+                </div>
+              </div>
+            ) : revealed.has(w.id) ? (
               <>
                 <p className="mt-2 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{w.bodyMarkdown}</p>
                 {w.imageCount > 0 && <ImageGallery urls={Array.from({ length: w.imageCount }, (_, i) => writeupImageUrl(slug, w.id, i))} />}
@@ -646,6 +727,8 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword }: { slug: string; me: M
                 <span className="rounded-full border border-line px-2.5 py-1 text-faint" title="solvers who said this helped">✓ {w.helpedCount} helped</span>
               )}
 
+              {w.mine && wEditing !== w.id && <button onClick={() => startWEdit(w)} className="rounded-full border border-line px-2.5 py-1 text-muted transition-colors hover:border-acid hover:text-acid">edit</button>}
+              {w.mine && <button onClick={() => delW(w)} className="rounded-full border border-line px-2.5 py-1 text-faint transition-colors hover:border-red-400 hover:text-red-400">delete</button>}
               {isOwner && (
                 <button
                   onClick={() => pin(w)}
