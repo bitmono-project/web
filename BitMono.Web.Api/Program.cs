@@ -50,7 +50,10 @@ builder.Services.AddHangfire((sp, config) => config
     .UseRecommendedSerializerSettings()
     .UsePostgreSqlStorage(o => o.UseConnectionFactory(
         new NpgsqlDataSourceConnectionFactory(sp.GetRequiredService<NpgsqlDataSource>()))));
-builder.Services.AddHangfireServer();
+// Cap concurrent obfuscations to one Hangfire worker per engine replica (the AppHost injects the count to
+// keep them in lockstep). BitMono is ~1 core/job, so dispatching more than there are replicas just thrashes.
+builder.Services.AddHangfireServer(options =>
+    options.WorkerCount = builder.Configuration.GetValue<int?>("Obfuscation:WorkerCount") ?? Environment.ProcessorCount);
 
 builder.Services.AddSingleton<FileStore>();
 builder.Services.AddScoped<ObfuscateJob>();

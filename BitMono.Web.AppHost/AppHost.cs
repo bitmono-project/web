@@ -1,10 +1,15 @@
 #pragma warning disable ASPIREPIPELINES003
 
+using Aspire.Hosting.Docker.Resources.ServiceNodes.Swarm;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 const int WebDeployPort = 8429;
 const int ApiDeployPort = 8430;
 const int ObfuscationPort = 8743;
+// Single source of truth for obfuscation parallelism: this many engine replicas (below) AND this many api
+// Hangfire workers (injected into the api as Obfuscation__WorkerCount). BitMono is ~1 CPU core/job — tune to host.
+const int ObfuscationConcurrency = 3;
 
 var config = builder.Configuration;
 var runMode = builder.ExecutionContext.IsRunMode;
@@ -42,7 +47,31 @@ var obfuscation = (runMode && Directory.Exists(obfuscationPath)
 
 if (!runMode)
 {
-    obfuscation.PublishAsDockerComposeService((_, service) => service.Restart = "always");
+    // The engine ships from its own repo as :latest. Run several replicas so uploads don't queue behind
+    // one engine (the api round-robins to them over Docker DNS) and pull a fresh image on every deploy.
+    obfuscation
+        .WithImagePullPolicy(ImagePullPolicy.Always)   // -> compose pull_policy: always (deploy-time freshness)
+        .PublishAsDockerComposeService((_, service) =>
+        {
+            service.Restart = "always";
+            service.Deploy = new Deploy { Replicas = ObfuscationConcurrency };   // compose up honors deploy.replicas
+            service.Labels ??= [];
+            service.Labels["com.centurylinklabs.watchtower.scope"] = "obfuscation";
+        });
+
+    // Aspire has no continuous image auto-update, so Watchtower handles new :latest pushes between deploys:
+    // poll every 5 min, scoped to the obfuscation replicas only (api/web are pinned to build tags).
+    builder.AddContainer("watchtower", "nickfedor/watchtower")
+        .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock")
+        .WithArgs("--interval", "300", "--cleanup", "--scope", "obfuscation")
+        .PublishAsDockerComposeService((_, service) =>
+        {
+            service.Restart = "always";
+            // Watchtower's own scope membership is set by this label (not just the --scope arg), and
+            // self-update/old-image cleanup needs it. Must match the label on the obfuscation replicas.
+            service.Labels ??= [];
+            service.Labels["com.centurylinklabs.watchtower.scope"] = "obfuscation";
+        });
 }
 
 var migrations = builder.AddProject<Projects.BitMono_Web_MigrationService>("migrations")
@@ -57,6 +86,7 @@ var api = builder.AddProject<Projects.BitMono_Web_Api>("api", project => project
     .WithReference(redis)
     .WithReference(appdb)
     .WithEnvironment("Obfuscation__Url", obfuscation.GetEndpoint("http"))
+    .WithEnvironment("Obfuscation__WorkerCount", ObfuscationConcurrency.ToString())
     .WithEnvironment("DOTNET_hostBuilder__reloadConfigOnChange", "false")
     .WaitFor(db)
     .WaitFor(redis)
