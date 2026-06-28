@@ -4,6 +4,7 @@ using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Security;
 using BitMono.Web.Api.Storage;
+using BitMono.Web.Api.Verification;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -110,6 +111,14 @@ public sealed class UploadController(
             CreatedAt = now,
             UpdatedAt = now,
         };
+
+        // Optional solve verification, set right at creation (the author can still change it later).
+        if (form.VerificationKind != VerificationKind.None)
+        {
+            var verr = VerificationSetup.Apply(crackme, form.VerificationKind, form.VerificationAnswer?.Trim());
+            if (verr is not null)
+                return BadRequest(verr);
+        }
 
         db.TermsAcceptances.Add(terms);
         db.Crackmes.Add(crackme);

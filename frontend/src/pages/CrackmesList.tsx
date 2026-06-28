@@ -5,6 +5,7 @@ import {
   type CrackmeFilters, type CrackmeListItem, listCrackmes,
   PLATFORMS, platformLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
+import { useTitle } from '../lib/useTitle'
 
 const SORTS = [
   { value: 'date', label: 'Newest' },
@@ -31,6 +32,8 @@ export default function CrackmesList() {
   }, [filters])
 
   const set = (patch: Partial<CrackmeFilters>) => setFilters((f) => ({ ...f, ...patch }))
+
+  useTitle('Crackmes — .NET reverse-engineering challenges — BitMono')
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">

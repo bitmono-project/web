@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { type UserProfile, type ProfileCrackme, getUserProfile, getUserCrackmes, difficultyLabel, formatDate } from '../lib/crackmes'
 import { RanksDialog } from '../components/RanksDialog'
+import { useTitle } from '../lib/useTitle'
 
 export default function Profile() {
   const { handle = '' } = useParams()
@@ -21,6 +22,8 @@ export default function Profile() {
     getUserCrackmes(handle).then((c) => { if (live) setCrackmes(c) })
     return () => { live = false }
   }, [handle])
+
+  useTitle(profile ? `${profile.displayName} (@${profile.handle}) — BitMono` : 'Profile — BitMono')
 
   if (state === 'loading') return <main className="mx-auto max-w-3xl px-6 py-24 text-center font-mono text-sm text-muted">loading<span className="caret">_</span></main>
   if (state === 'missing' || !profile) return (

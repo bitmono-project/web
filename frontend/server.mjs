@@ -4,66 +4,23 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crackmeCardPng, siteCardPng } from './og.mjs';
+import { headFor, injectHead, buildSitemap } from './seo.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiUrl = process.env.API_URL ?? 'http://api:8430';
 const port = Number(process.env.PORT ?? 8429);
+// Set GSC_VERIFICATION to the google-site-verification token to add the meta tag (URL-prefix property
+// fallback). Not needed when verifying via DNS — see SEO.md.
+const gscToken = process.env.GSC_VERIFICATION ?? null;
 
 const distDir = path.join(__dirname, 'dist');
 const template = readFileSync(path.join(distDir, 'index.html'), 'utf8');
 
-const DEFAULTS = {
-  title: 'BitMono — obfuscate your .NET in the browser',
-  description: 'Free & open-source obfuscator for .NET and Mono. Drop your assembly, get it protected — no install.',
-};
-
-const escAttr = (s) => String(s ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-// Cloudflare terminates TLS, so trust its forwarded proto/host to build absolute (https://) social URLs.
+// Cloudflare terminates TLS, so trust its forwarded proto/host to build absolute (https://) URLs.
 function originOf(req) {
   const proto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
   const host = req.headers['x-forwarded-host'] || req.headers.host || 'bitmono.dev';
   return `${proto}://${host}`;
-}
-
-function socialTags({ title, description, url, image, type = 'website' }) {
-  const og = [
-    ['og:type', type], ['og:site_name', 'BitMono'], ['og:title', title],
-    ['og:description', description], ['og:url', url], ['og:image', image],
-    ['og:image:width', '1200'], ['og:image:height', '630'], ['og:image:alt', title],
-  ].map(([p, v]) => `<meta property="${p}" content="${escAttr(v)}"/>`);
-  const tw = [
-    ['twitter:card', 'summary_large_image'], ['twitter:title', title],
-    ['twitter:description', description], ['twitter:image', image],
-  ].map(([n, v]) => `<meta name="${n}" content="${escAttr(v)}"/>`);
-  return [...og, ...tw].join('\n    ');
-}
-
-// Per-page social tags. Crackme pages fetch their own data (incl. taken-down tombstones); the rest get site defaults.
-async function tagsFor(req) {
-  const origin = originOf(req);
-  const m = req.path.match(/^\/challenge\/([^/]+)\/?$/);
-  if (m) {
-    const slug = decodeURIComponent(m[1]);
-    try {
-      const r = await fetch(`${apiUrl}/api/crackmes/${encodeURIComponent(slug)}`, { headers: { accept: 'application/json' } });
-      if (r.ok) {
-        const c = await r.json();
-        const diff = c.avgDifficulty != null ? ` · difficulty ${c.avgDifficulty.toFixed(1)}/6` : '';
-        const description = (c.description && c.description.trim())
-          || `A ${c.runtime || '.NET'} crackme by ${c.author}${diff}. Reverse it and prove your solve on BitMono.`;
-        return socialTags({
-          title: `${c.title} — BitMono crackme`,
-          description,
-          url: `${origin}/challenge/${slug}`,
-          image: `${origin}/og/challenge/${encodeURIComponent(slug)}.png`,
-          type: 'article',
-        });
-      }
-    } catch { /* fall through to site defaults */ }
-  }
-  return socialTags({ ...DEFAULTS, url: origin + req.path, image: `${origin}/og.png` });
 }
 
 const app = express();
@@ -90,15 +47,27 @@ app.get('/og/challenge/:slug.png', async (req, res) => {
   }
 });
 
-// Hashed build assets. index:false so "/" falls through to the SPA handler below (which injects social tags).
+// XML sitemap — static routes + every public crackme + author profiles, fetched live from the API.
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const xml = await buildSitemap(originOf(req), { apiUrl });
+    res.set('Content-Type', 'application/xml; charset=utf-8').set('Cache-Control', 'public, max-age=3600').send(xml);
+  } catch {
+    res.status(500).end();
+  }
+});
+
+// Hashed build assets + robots.txt. index:false so "/" falls through to the SEO handler below.
 app.use(express.static(distDir, { index: false }));
 
-// SPA fallback — serve index.html with per-page social tags injected before </head>. Crawlers (Telegram,
-// X, Discord, …) don't run JS, so the tags must be server-rendered here. Function replacer: titles with $ are safe.
+// SPA fallback — serve index.html with per-route <title>, description, canonical, robots, Open Graph,
+// Twitter and JSON-LD injected before </head>. Crawlers (Google's first wave, Telegram, X, Discord,
+// AI bots) don't run JS, so all SEO-critical head tags must be server-rendered here.
 app.use(async (req, res) => {
-  const tags = await tagsFor(req);
-  res.set('Content-Type', 'text/html; charset=utf-8')
-    .send(template.replace('</head>', () => `    ${tags}\n  </head>`));
+  const head = await headFor(req, { apiUrl, origin: originOf(req) });
+  res.status(head.status ?? 200)
+    .set('Content-Type', 'text/html; charset=utf-8')
+    .send(injectHead(template, head, { gscToken }));
 });
 
 app.listen(port, '0.0.0.0');

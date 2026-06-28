@@ -1,6 +1,8 @@
 import { LegalPage, Sec, Mail } from '../components/Legal'
+import { useTitle } from '../lib/useTitle'
 
 export default function Privacy() {
+  useTitle('Privacy Policy — BitMono')
   return (
     <LegalPage title="Privacy Policy" updated="June 27, 2026">
       <p>

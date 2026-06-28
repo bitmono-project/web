@@ -225,28 +225,9 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (string.IsNullOrEmpty(answer) && kind == c.VerificationKind && kind != VerificationKind.None)
             return NoContent();
 
-        switch (kind)
-        {
-            case VerificationKind.None:
-                c.VerificationHash = c.VerificationSalt = c.VerificationPattern = null;
-                break;
-            case VerificationKind.Regex:
-                if (string.IsNullOrEmpty(answer))
-                    return BadRequest("A regex pattern is required.");
-                try { _ = new Regex(answer, RegexOptions.None, RegexMatchTimeout); }
-                catch (ArgumentException) { return BadRequest("That isn't a valid regular expression."); }
-                c.VerificationPattern = answer;
-                c.VerificationHash = c.VerificationSalt = null;
-                break;
-            default: // ExactCaseInsensitive / ExactCaseSensitive
-                if (string.IsNullOrEmpty(answer))
-                    return BadRequest("An answer is required.");
-                var normalized = kind == VerificationKind.ExactCaseInsensitive ? answer.ToLowerInvariant() : answer;
-                (c.VerificationHash, c.VerificationSalt) = VerificationHasher.Hash(normalized);
-                c.VerificationPattern = null;
-                break;
-        }
-        c.VerificationKind = kind;
+        var error = VerificationSetup.Apply(c, kind, answer);
+        if (error is not null)
+            return BadRequest(error);
         c.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return NoContent();

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { type LeaderboardEntry, type MyRank, getLeaderboard, getMyRank } from '../lib/crackmes'
 import { RanksDialog } from '../components/RanksDialog'
+import { useTitle } from '../lib/useTitle'
 
 const SCOPES = [
   { value: '', label: 'Overall' },
@@ -28,6 +29,8 @@ export default function Leaderboard() {
   useEffect(() => {
     if (me) getMyRank().then(setMine)
   }, [me])
+
+  useTitle('Leaderboard — BitMono crackmes')
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">

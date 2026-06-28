@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
 import { LegalPage, Sec, Mail } from '../components/Legal'
+import { useTitle } from '../lib/useTitle'
 
 export default function Terms() {
+  useTitle('Terms of Service — BitMono')
   return (
     <LegalPage title="Terms of Service" updated="June 27, 2026">
       <p>

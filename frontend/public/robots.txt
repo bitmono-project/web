@@ -1,0 +1,9 @@
+# robots.txt — https://bitmono.dev
+# Everything is welcome: search engines, AI crawlers, archivers — all of it. We don't block anyone.
+# Content-less app pages (login, upload, admin, …) are kept out of the index via a server-side
+# noindex tag, not blocked here — bots may still crawl them.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://bitmono.dev/sitemap.xml

@@ -24,6 +24,11 @@ public sealed class UploadForm
     // Owner reaction toggles (default on; frontend always sends explicit values).
     public bool ReactionsEnabled { get; set; } = true;
     public bool CommentReactionsEnabled { get; set; } = true;
+
+    // Optional solve verification set at creation. None = honor system. The enum binds from the form
+    // value case-insensitively, so the frontend's camelCase ("regex", "exactCaseInsensitive") still maps.
+    public VerificationKind VerificationKind { get; set; } = VerificationKind.None;
+    public string? VerificationAnswer { get; set; }
 }
 
 public sealed record UploadResponse(Guid Id, string Slug, string Status);

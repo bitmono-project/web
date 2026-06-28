@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getProtections, type ProtectionInfo } from '../lib/api'
-import { PLATFORMS } from '../lib/crackmes'
+import { PLATFORMS, VERIFICATION_KINDS } from '../lib/crackmes'
 import { getConfig } from '../lib/config'
 import { useAuth } from '../lib/auth'
 
@@ -37,6 +37,7 @@ export default function Upload() {
   const [accepted, setAccepted] = useState([false, false, false])
   const [reactionsEnabled, setReactionsEnabled] = useState(true)
   const [commentReactionsEnabled, setCommentReactionsEnabled] = useState(true)
+  const [verificationKind, setVerificationKind] = useState('none')
   const [fileName, setFileName] = useState('')
   const [phase, setPhase] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [error, setError] = useState('')
@@ -165,6 +166,20 @@ export default function Upload() {
           <label className="flex items-center gap-2 font-mono text-[13px] text-muted">
             <input type="checkbox" checked={commentReactionsEnabled} onChange={(e) => setCommentReactionsEnabled(e.target.checked)} /> Allow reactions on comments
           </label>
+        </div>
+
+        <div>
+          <label className={label} htmlFor="VerificationKind">Solve verification <span className="normal-case text-faint">(optional)</span></label>
+          <select id="VerificationKind" name="VerificationKind" className={field} value={verificationKind} onChange={(e) => setVerificationKind(e.target.value)}>
+            {VERIFICATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          </select>
+          {verificationKind !== 'none' && (
+            <input name="VerificationAnswer" required maxLength={500} className={`${field} mt-2`}
+              placeholder={verificationKind === 'regex' ? 'regex, e.g. ^BITMONO-\\d{4}$' : 'the correct answer (serial / keygen output / flag)'} />
+          )}
+          <p className="mt-1 font-mono text-[11px] leading-snug text-faint">
+            Make solvers submit the right answer instead of the honor button. It’s hashed on the server, never shown again — you can change it later from the crackme page.
+          </p>
         </div>
 
         {catalog.length > 0 && (

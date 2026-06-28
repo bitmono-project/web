@@ -14,6 +14,7 @@ import {
 import { type Me, isAdmin, useAuth } from '../lib/auth'
 import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
 import { getConfig } from '../lib/config'
+import { useTitle } from '../lib/useTitle'
 
 export default function CrackmeDetail() {
   const { slug = '' } = useParams()
@@ -35,6 +36,8 @@ export default function CrackmeDetail() {
 
   // Re-fetch after an admin action — takedown flips the page to the tombstone, restore flips it back.
   const reload = () => getCrackme(slug).then((r) => setC(r)).catch(() => {})
+
+  useTitle(c ? `${c.title} — BitMono crackme` : 'Crackme — BitMono')
 
   if (state === 'loading') return <Center>loading<span className="caret">_</span></Center>
   if (state === 'error') return <Center>couldn’t load this crackme.</Center>
