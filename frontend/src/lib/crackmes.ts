@@ -53,6 +53,7 @@ export interface CrackmeDetail {
   isOwner: boolean
   reactionsEnabled: boolean
   commentReactionsEnabled: boolean
+  commentsLocked: boolean
   reactions: Record<string, number>
   myReactions: string[]
   status: string
@@ -459,6 +460,15 @@ export async function updateCrackmeSettings(slug: string, reactionsEnabled: bool
     body: JSON.stringify({ reactionsEnabled, commentReactionsEnabled }),
   })
   return res.ok
+}
+
+// Moderator: hide a comment (toggle) and lock/unlock new comments on a crackme.
+export async function hideComment(id: string): Promise<boolean> {
+  return (await fetch(`/api/moderation/comments/${id}/hide`, { method: 'POST' })).ok
+}
+export async function setCommentsLock(crackmeId: string): Promise<boolean | null> {
+  const res = await fetch(`/api/moderation/${crackmeId}/comments-lock`, { method: 'POST' })
+  return res.ok ? ((await res.json()) as { commentsLocked: boolean }).commentsLocked : null
 }
 
 export interface RatingResult {

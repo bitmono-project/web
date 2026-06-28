@@ -23,6 +23,7 @@ public class Crackme
     // Owner-controlled (both default on): allow emoji reactions on the post / on its comments.
     public bool ReactionsEnabled { get; set; } = true;
     public bool CommentReactionsEnabled { get; set; } = true;
+    public bool CommentsLocked { get; set; }   // moderator/admin lock — blocks new comments
     // Authoritative when obfuscated through BitMono; author-stated otherwise. Owned JSON.
     public List<AppliedProtection> ProtectionsApplied { get; set; } = [];
 

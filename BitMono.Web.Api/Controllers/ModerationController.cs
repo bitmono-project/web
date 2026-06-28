@@ -288,6 +288,36 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
         return NoContent();
     }
 
+    // Hide / unhide a comment (moderator) — soft + reversible; hidden comments drop out of the public thread.
+    [HttpPost("comments/{id:guid}/hide")]
+    public async Task<IActionResult> HideComment(Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Comments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (c is null)
+            return NotFound();
+        c.IsHidden = !c.IsHidden;
+        c.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Ok(new { c.IsHidden });
+    }
+
+    // Lock / unlock new comments on a crackme (moderator) — for when a thread goes off the rails.
+    [HttpPost("{id:guid}/comments-lock")]
+    public async Task<IActionResult> ToggleCommentsLock(Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Crackmes.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (c is null)
+            return NotFound();
+        c.CommentsLocked = !c.CommentsLocked;
+        c.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Ok(new { c.CommentsLocked });
+    }
+
     // Admin dashboard analytics — counts by status, totals, recent activity and a top-downloaded list.
     [HttpGet("stats")]
     [Authorize(Policy = AuthSetup.AdminPolicy)]

@@ -67,6 +67,7 @@ public sealed record CrackmeDetail(
     bool IsOwner,
     bool ReactionsEnabled,
     bool CommentReactionsEnabled,
+    bool CommentsLocked,
     IReadOnlyDictionary<string, int> Reactions,
     IReadOnlyList<string> MyReactions,
     CrackmeStatus Status,

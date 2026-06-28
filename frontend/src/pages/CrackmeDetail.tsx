@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   type CrackmeDetail as Detail, type CommentItem, type MyRating, type WriteupItem, type ReactionSummary,
-  getCrackme, getComments, postComment, getMyRating, rateCrackme,
+  getCrackme, getComments, postComment, hideComment, setCommentsLock, getMyRating, rateCrackme,
   getWriteups, submitWriteup, writeupAttachmentUrl, writeupImageUrl, toggleWriteupUpvote, toggleWriteupHelped, pinWriteup,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
   REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
@@ -11,7 +11,7 @@ import {
   markSolved, unmarkSolved, submitFlag, setVerification, VERIFICATION_KINDS,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate, statusLabel,
 } from '../lib/crackmes'
-import { type Me, isAdmin, useAuth } from '../lib/auth'
+import { type Me, isAdmin, isModerator, useAuth } from '../lib/auth'
 import { PromptDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
 import { ImageGallery } from '../components/ImageGallery'
 import { getConfig } from '../lib/config'
@@ -128,7 +128,7 @@ export default function CrackmeDetail() {
 
       <RatingsPanel slug={c.slug} me={me} initial={c} />
       <WriteupsPanel slug={c.slug} me={me} isOwner={c.isOwner} zipPassword={zipPassword} />
-      <CommentsPanel slug={c.slug} me={me} commentReactionsEnabled={c.commentReactionsEnabled} />
+      <CommentsPanel slug={c.slug} crackmeId={c.id} me={me} commentReactionsEnabled={c.commentReactionsEnabled} commentsLocked={c.commentsLocked} />
       {c.isOwner && (
         <>
           <OwnerSettings
@@ -428,12 +428,14 @@ function Scale({ label, value, avg, count, disabled, onPick }: {
   )
 }
 
-function CommentsPanel({ slug, me, commentReactionsEnabled }: { slug: string; me: Me | null; commentReactionsEnabled: boolean }) {
+function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsLocked }: { slug: string; crackmeId: string; me: Me | null; commentReactionsEnabled: boolean; commentsLocked: boolean }) {
   const [comments, setComments] = useState<CommentItem[]>([])
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [body, setBody] = useState('')
   const [isSpoiler, setIsSpoiler] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [locked, setLocked] = useState(commentsLocked)
+  const isMod = isModerator(me)
 
   useEffect(() => { getComments(slug).then(setComments) }, [slug])
 
@@ -448,18 +450,30 @@ function CommentsPanel({ slug, me, commentReactionsEnabled }: { slug: string; me
     }
   }
 
+  const hide = async (id: string) => {
+    if (await hideComment(id)) setComments((xs) => xs.filter((x) => x.id !== id))
+  }
+  const toggleLock = async () => {
+    const r = await setCommentsLock(crackmeId)
+    if (r !== null) setLocked(r)
+  }
+
   return (
     <div className="mt-10">
-      <div className="mb-3 font-mono text-[11px] uppercase tracking-wider text-faint">Comments ({comments.length})</div>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-faint">Comments ({comments.length}){locked && <span className="ml-2 normal-case text-faint">· 🔒 locked</span>}</span>
+        {isMod && <button onClick={toggleLock} className="font-mono text-[12px] text-faint transition-colors hover:text-acid">{locked ? 'unlock comments' : 'lock comments'}</button>}
+      </div>
 
       <div className="space-y-3">
         {comments.length === 0 && <p className="font-mono text-[13px] text-faint">No comments yet.</p>}
         {comments.map((cm) => (
           <div key={cm.id} className="rounded-lg border border-line bg-surface/30 p-3">
-            <div className="font-mono text-[11px] text-faint">
-              {cm.authorHandle
+            <div className="flex items-center justify-between font-mono text-[11px] text-faint">
+              <span>{cm.authorHandle
                 ? <Link to={`/user/${cm.authorHandle}`} className="transition-colors hover:text-acid">{cm.author}</Link>
-                : cm.author} · {formatDate(cm.createdAt)}
+                : cm.author} · {formatDate(cm.createdAt)}</span>
+              {isMod && <button onClick={() => hide(cm.id)} title="hide comment" className="text-faint transition-colors hover:text-red-400">hide</button>}
             </div>
             {cm.isSpoiler && !revealed.has(cm.id)
               ? <button onClick={() => setRevealed((s) => new Set(s).add(cm.id))} className="mt-1 font-mono text-[13px] text-acid hover:underline">[spoiler — click to reveal]</button>
@@ -473,7 +487,9 @@ function CommentsPanel({ slug, me, commentReactionsEnabled }: { slug: string; me
         ))}
       </div>
 
-      {me ? (
+      {locked ? (
+        <p className="mt-4 font-mono text-[13px] text-faint">🔒 Comments are locked on this crackme.</p>
+      ) : me ? (
         <div className="mt-4">
           <textarea
             className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"

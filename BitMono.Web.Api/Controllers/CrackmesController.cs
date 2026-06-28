@@ -371,6 +371,8 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var crackme = await db.Crackmes.AsNoTracking().Where(Public).FirstOrDefaultAsync(c => c.Slug == slug, ct);
         if (crackme is null)
             return NotFound();
+        if (crackme.CommentsLocked)
+            return StatusCode(StatusCodes.Status423Locked, "Comments are locked on this crackme.");
 
         var now = DateTime.UtcNow;
         var comment = new Comment
@@ -821,7 +823,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         Avg(c.QualitySum, c.QualityCount), c.QualityCount,
         c.SizeBytes, c.OriginalFileName, c.DownloadCount, c.SolvedCount,
         c.IsBitMonoObfuscated, c.Preset, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt,
-        isOwner, c.ReactionsEnabled, c.CommentReactionsEnabled, reactions, myReactions,
+        isOwner, c.ReactionsEnabled, c.CommentReactionsEnabled, c.CommentsLocked, reactions, myReactions,
         c.Status, c.TakedownReason, c.TakenDownAt, solvedByMe, authorHandle, c.VerificationKind);
 
     // A stripped-down detail for a taken-down crackme: keep title/author so the page still means
@@ -834,7 +836,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         SizeBytes: 0, OriginalFileName: null, DownloadCount: c.DownloadCount, SolvedCount: c.SolvedCount,
         IsBitMonoObfuscated: false, Preset: ObfuscationPreset.Custom, Protections: [],
         PublishedAt: c.PublishedAt ?? c.CreatedAt, IsOwner: false,
-        ReactionsEnabled: false, CommentReactionsEnabled: false,
+        ReactionsEnabled: false, CommentReactionsEnabled: false, CommentsLocked: false,
         Reactions: new Dictionary<string, int>(), MyReactions: [],
         Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt,
         SolvedByMe: false, AuthorHandle: authorHandle, VerificationKind: VerificationKind.None);
