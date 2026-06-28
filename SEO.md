@@ -31,7 +31,7 @@ Optional env var: set **`GSC_VERIFICATION`** on the frontend container to inject
 > Fallback (only if you can't use DNS): pick a **URL-prefix** property for `https://bitmono.dev/` and verify with the **HTML meta tag** — set `GSC_VERIFICATION=<token>` on the frontend container and redeploy, then click Verify.
 
 ### 2. Submit the sitemap
-Search Console → **Sitemaps** → enter `sitemap.xml` → **Submit**. Status should become **Success** with a discovered-URL count > 0 (recheck in a few hours if it says "Couldn't fetch").
+Search Console → **Sitemaps** → enter the **full URL** `https://bitmono.dev/sitemap.xml` → **Submit**. A **Domain** property won't accept the bare path `sitemap.xml` ("Invalid sitemap address") because it spans all subdomains/schemes — give it the absolute URL. Status should become **Success** with a discovered-URL count > 0 (recheck in a few hours if it says "Couldn't fetch").
 
 ### 3. Nudge the first pages (optional)
 Search Console → **URL Inspection** (top bar) → enter `https://bitmono.dev/` → **Request indexing**. Repeat for `https://bitmono.dev/crackmes`. (Small daily quota; the sitemap handles the rest. First indexing takes days→weeks.)
