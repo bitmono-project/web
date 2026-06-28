@@ -123,11 +123,13 @@ export function formatSize(bytes: number): string {
   return `${bytes} B`
 }
 
-// Local-time `YYYY-MM-DD HH:MM` — the UI shows timestamps to the minute everywhere this is used.
+// Local-time `YYYY-MM-DD HH:MM UTC±H` — labeled with the viewer's UTC offset so the zone is never ambiguous.
 export function formatDate(iso: string): string {
   const d = new Date(iso)
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  const off = -d.getTimezoneOffset() // minutes east of UTC
+  const tz = `UTC${off >= 0 ? '+' : '-'}${Math.floor(Math.abs(off) / 60)}${off % 60 ? ':' + p(Math.abs(off) % 60) : ''}`
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} ${tz}`
 }
 
 export async function listCrackmes(f: CrackmeFilters): Promise<CrackmeListResponse> {
