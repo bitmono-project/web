@@ -423,6 +423,7 @@ export async function getAdminCrackmes(q: string, status: string): Promise<Admin
 export interface CommentItem {
   id: string
   author: string
+  authorHandle: string | null
   body: string
   isSpoiler: boolean
   createdAt: string

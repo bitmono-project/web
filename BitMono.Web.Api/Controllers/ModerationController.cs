@@ -161,13 +161,14 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
-        return await db.Solutions.AsNoTracking()
+        // Materialize (Include Crackme + owned-JSON Images) so we can surface the image count to the queue.
+        var rows = await db.Solutions.AsNoTracking().Include(s => s.Crackme)
             .Where(s => s.Status == SolutionStatus.Pending)
             .OrderBy(s => s.CreatedAt)
-            .Select(s => new PendingWriteup(
-                s.Id, s.Crackme.Slug, s.Crackme.Title, s.AnonymousHandle ?? AppConstants.AnonymousHandle,
-                s.Title, s.BodyMarkdown, s.HasAttachment, s.CreatedAt))
             .ToListAsync(ct);
+        return rows.Select(s => new PendingWriteup(
+            s.Id, s.Crackme.Slug, s.Crackme.Title, s.AnonymousHandle ?? AppConstants.AnonymousHandle,
+            s.Title, s.BodyMarkdown, s.HasAttachment, s.Images.Count, s.CreatedAt)).ToList();
     }
 
     [HttpGet("writeups/{id:guid}/attachment")]
@@ -188,6 +189,22 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             var zip = PasswordZip.Create(Path.GetFileName(s.StorageKey), ms.ToArray(), cfg["Crackmes:ZipPassword"] ?? "bitmono.dev");
             return File(zip, "application/zip", "writeup.zip");
         }
+    }
+
+    // Raw writeup image for moderators previewing a pending submission.
+    [HttpGet("writeups/{id:guid}/images/{index:int}")]
+    public async Task<IActionResult> WriteupImage(Guid id, int index, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (s is null || index < 0 || index >= s.Images.Count)
+            return NotFound();
+        var img = s.Images[index];
+        var stream = await storage.OpenReadAsync(img.StorageKey, ct);
+        if (stream is null)
+            return NotFound();
+        return File(stream, img.ContentType);
     }
 
     [HttpPost("writeups/{id:guid}/approve")]

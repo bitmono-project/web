@@ -455,7 +455,11 @@ function CommentsPanel({ slug, me, commentReactionsEnabled }: { slug: string; me
         {comments.length === 0 && <p className="font-mono text-[13px] text-faint">No comments yet.</p>}
         {comments.map((cm) => (
           <div key={cm.id} className="rounded-lg border border-line bg-surface/30 p-3">
-            <div className="font-mono text-[11px] text-faint">{cm.author} · {formatDate(cm.createdAt)}</div>
+            <div className="font-mono text-[11px] text-faint">
+              {cm.authorHandle
+                ? <Link to={`/user/${cm.authorHandle}`} className="transition-colors hover:text-acid">{cm.author}</Link>
+                : cm.author} · {formatDate(cm.createdAt)}
+            </div>
             {cm.isSpoiler && !revealed.has(cm.id)
               ? <button onClick={() => setRevealed((s) => new Set(s).add(cm.id))} className="mt-1 font-mono text-[13px] text-acid hover:underline">[spoiler — click to reveal]</button>
               : <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{cm.body}</p>}

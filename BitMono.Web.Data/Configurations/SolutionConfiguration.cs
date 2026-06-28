@@ -11,6 +11,8 @@ public sealed class SolutionConfiguration : IEntityTypeConfiguration<Solution>
         builder.HasIndex(x => new { x.CrackmeId, x.Status });
         builder.HasIndex(x => x.CreatedAt);
 
+        builder.OwnsMany(x => x.Images, i => i.ToJson());
+
         builder.HasOne(x => x.Crackme).WithMany(c => c.Solutions).HasForeignKey(x => x.CrackmeId)
             .OnDelete(DeleteBehavior.Cascade);
     }

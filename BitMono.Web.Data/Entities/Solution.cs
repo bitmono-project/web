@@ -24,7 +24,18 @@ public class Solution
     [MaxLength(64)] public string? Sha256 { get; set; }
     public long? SizeBytes { get; set; }
 
+    // Optional inline screenshots — owned JSON (like Crackme.ProtectionsApplied). Served raw, not zipped.
+    public List<SolutionImage> Images { get; set; } = [];
+
     public int UpvoteCount { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+// Owned type (serialized as JSON on Solution) — one uploaded screenshot.
+public class SolutionImage
+{
+    [MaxLength(512)] public string StorageKey { get; set; } = null!;
+    [MaxLength(127)] public string ContentType { get; set; } = null!;
+    public long SizeBytes { get; set; }
 }

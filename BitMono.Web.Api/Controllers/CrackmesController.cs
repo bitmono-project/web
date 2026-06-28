@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Notifications;
 using BitMono.Web.Api.Progression;
@@ -326,7 +327,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var rows = await db.Comments.AsNoTracking()
             .Where(c => c.CrackmeId == id && !c.IsDeleted && !c.IsHidden)
             .OrderBy(c => c.CreatedAt)
-            .Select(c => new CommentRow(c.Id, c.AnonymousHandle, c.Body, c.IsSpoiler, c.CreatedAt))
+            .Select(c => new CommentRow(c.Id, c.AnonymousHandle, c.AuthorUserId, c.Body, c.IsSpoiler, c.CreatedAt))
             .ToListAsync(ct);
 
         var ids = rows.Select(r => r.Id).ToList();
@@ -335,6 +336,12 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             .Select(r => new CommentReactionRow(r.TargetId, r.Emoji, r.UserId)).ToListAsync(ct);
         var uid = CurrentUserId();
 
+        // Resolve commenter handles in one query so each name can link to its profile.
+        var authorIds = rows.Where(r => r.AuthorUserId != null).Select(r => r.AuthorUserId!.Value).Distinct().ToList();
+        var handles = authorIds.Count == 0
+            ? new Dictionary<Guid, string?>()
+            : await db.Users.AsNoTracking().Where(u => authorIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Handle, ct);
+
         var items = rows.Select(r =>
         {
             var rs = reactions.Where(x => x.TargetId == r.Id).ToList();
@@ -342,7 +349,8 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             IReadOnlyList<string> myReactions = uid is null
                 ? []
                 : rs.Where(x => x.UserId == uid).Select(x => x.Emoji).ToList();
-            return new CommentItem(r.Id, r.Author ?? AppConstants.AnonymousHandle, r.Body, r.IsSpoiler, r.CreatedAt, counts, myReactions);
+            var handle = r.AuthorUserId is { } au && handles.TryGetValue(au, out var h) ? h : null;
+            return new CommentItem(r.Id, r.Author ?? AppConstants.AnonymousHandle, handle, r.Body, r.IsSpoiler, r.CreatedAt, counts, myReactions);
         }).ToList();
         return Ok(items);
     }
@@ -385,7 +393,9 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
                 Guid.Parse(User.FindFirstValue("uid")!), crackme.Id, ct);
         }
         catch { }
-        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, comment.Body, comment.IsSpoiler, comment.CreatedAt,
+        var authorHandle = await db.Users.AsNoTracking()
+            .Where(u => u.Id == comment.AuthorUserId).Select(u => u.Handle).FirstOrDefaultAsync(ct);
+        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, authorHandle, comment.Body, comment.IsSpoiler, comment.CreatedAt,
             new Dictionary<string, int>(), []));
     }
 
@@ -467,14 +477,23 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (id is null)
             return NotFound();
 
+        // One open report per reporter per crackme — silently no-op on repeats so the queue can't be spammed.
+        var uid = CurrentUserId();
+        var ip = HttpContext.GetClientIp();
+        var already = uid is not null
+            ? await db.Reports.AsNoTracking().AnyAsync(r => r.CrackmeId == id && !r.IsResolved && r.ReporterUserId == uid, ct)
+            : ip is not null && await db.Reports.AsNoTracking().AnyAsync(r => r.CrackmeId == id && !r.IsResolved && r.ReporterUserId == null && r.ReporterIp == ip, ct);
+        if (already)
+            return Accepted();
+
         db.Reports.Add(new Report
         {
             Id = Guid.NewGuid(),
             TargetType = ModeratableType.Crackme,
             TargetId = id.Value,
             CrackmeId = id.Value,
-            ReporterUserId = CurrentUserId(),
-            ReporterIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ReporterUserId = uid,
+            ReporterIp = ip,
             Reason = reason,
             Details = req.Details is { Length: > 2000 } d ? d[..2000] : req.Details,
             CreatedAt = DateTime.UtcNow,
@@ -512,11 +531,14 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (id is null)
             return NotFound();
 
-        var writeups = await db.Solutions.AsNoTracking()
+        // Materialize so the owned-JSON Images load with each row (EF can't count a JSON collection in SQL).
+        var rows = await db.Solutions.AsNoTracking()
             .Where(s => s.CrackmeId == id && s.Status == SolutionStatus.Approved)
             .OrderByDescending(s => s.UpvoteCount).ThenBy(s => s.CreatedAt)
-            .Select(s => new WriteupItem(s.Id, s.AnonymousHandle ?? AppConstants.AnonymousHandle, s.Title, s.BodyMarkdown, s.HasAttachment, s.UpvoteCount, s.CreatedAt))
             .ToListAsync(ct);
+        var writeups = rows.Select(s => new WriteupItem(
+            s.Id, s.AnonymousHandle ?? AppConstants.AnonymousHandle, s.Title, s.BodyMarkdown,
+            s.HasAttachment, s.Images.Count, s.UpvoteCount, s.CreatedAt)).ToList();
         return Ok(writeups);
     }
 
@@ -569,6 +591,31 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             solution.SizeBytes = file.Length;
         }
 
+        // Optional inline screenshots — up to 10, 50 MB total across all of them.
+        var images = (form.Images ?? []).Where(f => f is { Length: > 0 }).ToList();
+        if (images.Count > 0)
+        {
+            const int maxImages = 10;
+            const long maxImagesTotal = 50L * 1024 * 1024;
+            if (images.Count > maxImages)
+                return BadRequest($"Up to {maxImages} images per writeup.");
+            if (images.Sum(f => f.Length) > maxImagesTotal)
+                return BadRequest($"Images must total under {maxImagesTotal / (1024 * 1024)} MB.");
+
+            var n = 0;
+            foreach (var img in images)
+            {
+                if (!(img.ContentType ?? "").StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                    return BadRequest("Only image files are allowed in the gallery.");
+                await using var ims = new MemoryStream();
+                await img.CopyToAsync(ims, ct);
+                var ikey = $"writeups/{id:N}/images/{n}{Path.GetExtension(SanitizeFileName(img.FileName))}";
+                await storage.SaveAsync(ikey, new MemoryStream(ims.ToArray(), writable: false), ct);
+                solution.Images.Add(new SolutionImage { StorageKey = ikey, ContentType = img.ContentType!, SizeBytes = img.Length });
+                n++;
+            }
+        }
+
         db.Solutions.Add(solution);
         await db.SaveChangesAsync(ct);
         try
@@ -601,6 +648,23 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             var zip = PasswordZip.Create(Path.GetFileName(s.StorageKey), ms.ToArray(), cfg["Crackmes:ZipPassword"] ?? "bitmono.dev");
             return File(zip, "application/zip", $"{slug}-writeup.zip");
         }
+    }
+
+    // Raw image from a writeup's gallery — public (approved writeups only), no password since it's meant to be viewed inline.
+    [HttpGet("{slug}/writeups/{id:guid}/images/{index:int}")]
+    public async Task<IActionResult> WriteupImage(string slug, Guid id, int index, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var s = await db.Solutions.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
+        if (s is null || index < 0 || index >= s.Images.Count)
+            return NotFound();
+        var img = s.Images[index];
+        var stream = await storage.OpenReadAsync(img.StorageKey, ct);
+        if (stream is null)
+            return NotFound();
+        return File(stream, img.ContentType);
     }
 
     private static string SanitizeFileName(string name)

@@ -31,7 +31,7 @@ public sealed class UploadController(
     {
         // Cloudflare Turnstile — Turnstile injects "cf-turnstile-response" into the form. No-op if unset.
         var captchaToken = Request.Form["cf-turnstile-response"].ToString();
-        if (!await turnstile.VerifyAsync(captchaToken, HttpContext.Connection.RemoteIpAddress?.ToString(), ct))
+        if (!await turnstile.VerifyAsync(captchaToken, HttpContext.GetClientIp(), ct))
             return BadRequest("Captcha check failed — please try again.");
 
         var max = cfg.GetValue<long?>("Crackmes:MaxUploadBytes") ?? 10 * 1024 * 1024;
@@ -65,7 +65,7 @@ public sealed class UploadController(
 
         var uid = Guid.Parse(User.FindFirstValue("uid")!);
         var handle = User.Identity?.Name ?? AppConstants.AnonymousHandle;
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ip = HttpContext.GetClientIp();
         var now = DateTime.UtcNow;
 
         await using var scope = scopeFactory.CreateAsyncScope();
