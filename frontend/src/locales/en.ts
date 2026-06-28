@@ -1,0 +1,65 @@
+import type { Dict } from '../lib/translate'
+
+// English is the source of truth. Other locales mirror these keys; any missing key falls back here.
+// Product/tech terms (BitMono, .NET, Mono, AsmResolver, NuGet, OAuth, .dll, IL, CI) stay untranslated.
+export const en: Dict = {
+  nav: {
+    obfuscate: 'Obfuscate',
+    crackmes: 'Crackmes',
+    leaderboard: 'Leaderboard',
+    review: 'Review',
+    admin: 'Admin',
+    docs: 'Docs',
+    submissions: 'submissions',
+    submit: 'submit',
+    login: 'login',
+    logout: 'logout',
+    notifications: 'Notifications',
+    language: 'Language',
+  },
+  footer: {
+    copy: '© bitmono — free & open-source obfuscator for .NET & Mono · web {version}',
+    privacy: 'privacy',
+    terms: 'terms',
+    contact: 'contact',
+    docs: 'docs',
+    source: 'source',
+    obfuscation: 'obfuscation',
+    engine: 'engine',
+    discord: 'discord',
+  },
+  home: {
+    badge: 'free & open-source ↗',
+    heroBefore: 'Obfuscate your',
+    heroAfter: 'right in the browser.',
+    subtitle: 'Drop a .dll — get it back with renamed symbols, stripped namespaces and encrypted strings. No install, nothing stored.',
+    engineLabel: 'engine · BitMono',
+    protections: 'protections //',
+    pillars: {
+      static: {
+        title: 'Static, never run',
+        body: 'BitMono rewrites the IL with AsmResolver. Your assembly is analyzed, never executed — safe by construction.',
+      },
+      nothingKept: {
+        title: 'Nothing is kept',
+        body: 'Your upload is deleted the instant it’s obfuscated, and the result is wiped the moment you download it.',
+      },
+      realEngine: {
+        title: 'The real engine',
+        body: 'The same BitMono that ships on NuGet and runs in CI pipelines — not a watered-down web port.',
+      },
+    },
+  },
+  login: {
+    title: 'Sign in',
+    subtitle: 'Accounts are OAuth-only — no passwords. You need one to upload, comment, or vote. Downloads stay anonymous.',
+    discord: 'Continue with Discord',
+    github: 'Continue with GitHub',
+    notConfigured: '· not configured',
+    devTitle: 'dev login (development only)',
+    handle: 'handle',
+    admin: 'admin',
+    signIn: 'sign in',
+    failed: 'dev login failed',
+  },
+}

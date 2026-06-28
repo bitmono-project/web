@@ -1,0 +1,63 @@
+import type { Dict } from '../lib/translate'
+
+export const vi: Dict = {
+  nav: {
+    obfuscate: 'Làm rối mã',
+    crackmes: 'Crackmes',
+    leaderboard: 'Bảng xếp hạng',
+    review: 'Kiểm duyệt',
+    admin: 'Quản trị',
+    docs: 'Tài liệu',
+    submissions: 'bài đã gửi',
+    submit: 'gửi',
+    login: 'đăng nhập',
+    logout: 'đăng xuất',
+    notifications: 'Thông báo',
+    language: 'Ngôn ngữ',
+  },
+  footer: {
+    copy: '© bitmono — trình làm rối mã .NET và Mono mã nguồn mở miễn phí · web {version}',
+    privacy: 'quyền riêng tư',
+    terms: 'điều khoản',
+    contact: 'liên hệ',
+    docs: 'tài liệu',
+    source: 'mã nguồn',
+    obfuscation: 'làm rối mã',
+    engine: 'engine',
+    discord: 'discord',
+  },
+  home: {
+    badge: 'mã nguồn mở & miễn phí ↗',
+    heroBefore: 'Làm rối',
+    heroAfter: 'của bạn ngay trong trình duyệt.',
+    subtitle: 'Thả một tệp .dll — nhận lại với các ký hiệu được đổi tên, namespace bị loại bỏ và chuỗi được mã hóa. Không cần cài đặt, không lưu trữ gì.',
+    engineLabel: 'engine · BitMono',
+    protections: 'bảo vệ //',
+    pillars: {
+      static: {
+        title: 'Tĩnh, không bao giờ chạy',
+        body: 'BitMono viết lại IL bằng AsmResolver. Assembly của bạn được phân tích, không bao giờ được thực thi — an toàn theo thiết kế.',
+      },
+      nothingKept: {
+        title: 'Không lưu giữ gì',
+        body: 'Tệp bạn tải lên bị xóa ngay khi được làm rối, và kết quả bị xóa ngay khi bạn tải xuống.',
+      },
+      realEngine: {
+        title: 'Engine thực thụ',
+        body: 'Chính là BitMono được phát hành trên NuGet và chạy trong các pipeline CI — không phải bản web rút gọn.',
+      },
+    },
+  },
+  login: {
+    title: 'Đăng nhập',
+    subtitle: 'Tài khoản chỉ dùng OAuth — không mật khẩu. Bạn cần tài khoản để tải lên, bình luận hoặc bình chọn. Tải xuống vẫn ẩn danh.',
+    discord: 'Tiếp tục với Discord',
+    github: 'Tiếp tục với GitHub',
+    notConfigured: '· chưa được cấu hình',
+    devTitle: 'đăng nhập dev (chỉ dành cho phát triển)',
+    handle: 'tên người dùng',
+    admin: 'quản trị',
+    signIn: 'đăng nhập',
+    failed: 'đăng nhập dev thất bại',
+  },
+}
