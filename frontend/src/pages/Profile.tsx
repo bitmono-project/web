@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { type UserProfile, type ProfileCrackme, getUserProfile, getUserCrackmes, difficultyLabel, formatDate } from '../lib/crackmes'
 import { RanksDialog } from '../components/RanksDialog'
+import { rankByName } from '../lib/ranks'
 import { useAuth } from '../lib/auth'
 import { Tooltip } from '../components/Tooltip'
 import { useTitle } from '../lib/useTitle'
@@ -35,6 +36,8 @@ export default function Profile() {
     </main>
   )
 
+  const rank = rankByName(profile.rankName)
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <div className="flex flex-wrap items-center gap-4">
@@ -55,9 +58,12 @@ export default function Profile() {
         <StatCard label="Points" value={profile.points.toLocaleString()} />
         <button
           onClick={() => setRanksOpen(true)}
-          className="rounded-xl border border-line bg-surface/30 p-4 text-center transition-colors hover:border-acid/40"
+          title={profile.rankName}
+          className="flex flex-col items-center justify-center rounded-xl border border-line bg-surface/30 p-4 text-center transition-colors hover:border-acid/40"
         >
-          <div className="truncate font-display text-base font-bold text-acid">{profile.rankName}</div>
+          {rank
+            ? <img src={`/rank-${rank.slug}.png`} alt={profile.rankName} className="h-11 w-11" style={{ filter: `drop-shadow(0 0 10px ${rank.color}55)` }} />
+            : <div className="truncate font-display text-base font-bold text-acid">{profile.rankName}</div>}
           <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-faint">Rank ↗</div>
         </button>
         <StatCard label="Solved" value={String(profile.solves)} />

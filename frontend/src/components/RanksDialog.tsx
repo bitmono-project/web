@@ -21,10 +21,10 @@ export function RanksDialog({ points, self = true, onClose }: { points: number; 
             return (
               <li
                 key={r.slug}
-                className="flex items-center gap-2.5 rounded-lg border px-3 py-2 font-mono text-[13px]"
+                className="flex items-center gap-3 rounded-lg border px-3 py-2 font-mono text-[13px]"
                 style={{ borderColor: here ? `${r.color}66` : 'transparent', background: here ? `${r.color}14` : 'transparent' }}
               >
-                <img src={`/rank-${r.slug}.png`} alt="" className={`h-7 w-7 shrink-0 ${here ? '' : 'opacity-60'}`} />
+                <img src={`/rank-${r.slug}.png`} alt="" className="h-10 w-10 shrink-0" />
                 <Link
                   to={`/ranks#${r.slug}`}
                   onClick={onClose}

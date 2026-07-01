@@ -47,6 +47,16 @@ export default function FAQ() {
         </p>
       </Sec>
 
+      <Sec title="How do ranks work?">
+        <p>
+          Every solve earns points, and points move you up an eight-tier ladder — from{' '}
+          <em>script kiddie</em> all the way to <em>nop-sled legend</em>. You can{' '}
+          <Link to="/ranks" className="text-acid hover:underline">see all eight ranks and what they mean</Link>,
+          and track your standing on the{' '}
+          <Link to="/leaderboard" className="text-acid hover:underline">leaderboard</Link>.
+        </p>
+      </Sec>
+
       <Cat>The obfuscator</Cat>
 
       <Sec title="How does the obfuscator work — is my file safe?">

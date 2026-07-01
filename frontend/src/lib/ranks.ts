@@ -85,6 +85,11 @@ export const RANKS: Rank[] = [
   },
 ]
 
+// Look up a rank by its display name (as the server returns it, e.g. "ghost in the IL").
+export function rankByName(name: string): Rank | undefined {
+  return RANKS.find((r) => r.name === name)
+}
+
 // Highest tier whose threshold `points` has reached.
 export function rankIndexForPoints(points: number): number {
   let idx = 0

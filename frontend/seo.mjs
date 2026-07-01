@@ -29,6 +29,14 @@ const ROUTES = {
     title: 'Terms of Service — BitMono',
     description: 'The rules for using BitMono — the free .NET obfuscator and the crackmes gallery. No malware, challenges must run, everything is moderated.',
   },
+  '/faq': {
+    title: 'FAQ — BitMono',
+    description: 'How BitMono works — the free .NET & Mono obfuscator and the crackmes gallery. Submitting crackmes and writeups, downloads, ranks, accounts and reporting.',
+  },
+  '/ranks': {
+    title: 'Ranks — BitMono',
+    description: 'The eight BitMono ranks, from script kiddie to nop-sled legend. Climb by solving crackmes — harder challenges and first-blood solves pay the most.',
+  },
   '/login': { title: 'Sign in — BitMono', description: SITE.description, noindex: true },
   '/upload': { title: 'Submit a crackme — BitMono', description: 'Share a .NET crackme with the BitMono gallery.', noindex: true },
   '/submissions': { title: 'My submissions — BitMono', description: SITE.description, noindex: true },
@@ -362,6 +370,8 @@ export async function buildSitemap(origin, { apiUrl }) {
     { loc: `${origin}/leaderboard` },
     { loc: `${origin}/privacy` },
     { loc: `${origin}/terms` },
+    { loc: `${origin}/faq` },
+    { loc: `${origin}/ranks` },
   ]
   const handles = new Set()
   for (let page = 1; page <= 100; page++) {
