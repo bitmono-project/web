@@ -24,6 +24,8 @@ public class CrackmesDbContext(DbContextOptions<CrackmesDbContext> options) : Db
     public DbSet<ModerationReview> ModerationReviews => Set<ModerationReview>();
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<TermsAcceptance> TermsAcceptances => Set<TermsAcceptance>();
+    public DbSet<DownloadCount> DownloadCounts => Set<DownloadCount>();
+    public DbSet<ReleaseScan> ReleaseScans => Set<ReleaseScan>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CrackmesDbContext).Assembly);

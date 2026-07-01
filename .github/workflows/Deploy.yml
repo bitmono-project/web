@@ -72,3 +72,5 @@ jobs:
           Parameters__ZipPassword: ${{ secrets.CRACKME_ZIP_PASSWORD }}
           # Sentry/Bugsink DSN — Parameters__ so AppHost.WireParam forwards it into the api container
           Parameters__SentryDsn: ${{ secrets.SENTRY_DSN }}
+          # VirusTotal API key — optional; enables live release scan badges on the download page
+          Parameters__VirusTotalApiKey: ${{ secrets.VIRUSTOTAL_API_KEY }}

@@ -27,10 +27,13 @@ const app = express();
 
 // http-proxy-middleware v3 proxies at root with pathFilter so /api, /obfuscate, /version, /protections reach
 // the API with the full path. Host is preserved (changeOrigin:false) so the API builds correct OAuth redirects.
+// /download (no slash) is the React chooser page and falls through to the SEO handler; /download/<slug> is the
+// file proxy that streams the release asset from the API.
+const apiPrefixes = ['/api', '/obfuscate', '/version', '/protections'];
 app.use(createProxyMiddleware({
   target: apiUrl,
   changeOrigin: false,
-  pathFilter: ['/api', '/obfuscate', '/version', '/protections'],
+  pathFilter: (pathname) => apiPrefixes.some((p) => pathname.startsWith(p)) || pathname.startsWith('/download/'),
 }));
 
 // Dynamic Open Graph cards (1200x630 PNG). Cached hard — content is stable and Telegram/Cloudflare cache anyway.

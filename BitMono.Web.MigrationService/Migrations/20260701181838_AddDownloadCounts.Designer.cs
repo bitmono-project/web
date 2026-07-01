@@ -3,6 +3,7 @@ using System;
 using BitMono.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BitMono.Web.MigrationService.Migrations
 {
     [DbContext(typeof(CrackmesDbContext))]
-    partial class CrackmesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260701181838_AddDownloadCounts")]
+    partial class AddDownloadCounts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -493,31 +496,6 @@ namespace BitMono.Web.MigrationService.Migrations
                         .IsUnique();
 
                     b.ToTable("Reactions");
-                });
-
-            modelBuilder.Entity("BitMono.Web.Data.Entities.ReleaseScan", b =>
-                {
-                    b.Property<string>("Sha256")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<int>("Flagged")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<int>("Total")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Sha256");
-
-                    b.ToTable("ReleaseScans");
                 });
 
             modelBuilder.Entity("BitMono.Web.Data.Entities.Report", b =>

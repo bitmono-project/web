@@ -29,6 +29,7 @@ function Header() {
       </Link>
       <nav className="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[13px] text-muted sm:gap-x-5">
         <Link to="/#obfuscate" className="hidden transition-colors hover:text-ink sm:inline">{t('nav.obfuscate')}</Link>
+        <Link to="/download" className="transition-colors hover:text-ink">{t('nav.download')}</Link>
         <Link to="/crackmes" className="transition-colors hover:text-ink">{t('nav.crackmes')}</Link>
         <Link to="/leaderboard" className="transition-colors hover:text-ink">{t('nav.leaderboard')}</Link>
         {isModerator(me) && !isAdmin(me) && <Link to="/moderation" className="transition-colors hover:text-ink">{t('nav.review')}</Link>}

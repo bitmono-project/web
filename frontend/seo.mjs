@@ -37,6 +37,10 @@ const ROUTES = {
     title: 'Ranks — BitMono',
     description: 'The eight BitMono ranks, from script kiddie to nop-sled legend. Climb by solving crackmes — harder challenges and first-blood solves pay the most.',
   },
+  '/download': {
+    title: 'Download BitMono — .NET & Unity obfuscator',
+    description: 'Download BitMono, the free & open-source obfuscator for .NET and Unity. A guided picker resolves the exact CLI, Unity package or NuGet build for your runtime — always the latest release.',
+  },
   '/login': { title: 'Sign in — BitMono', description: SITE.description, noindex: true },
   '/upload': { title: 'Submit a crackme — BitMono', description: 'Share a .NET crackme with the BitMono gallery.', noindex: true },
   '/submissions': { title: 'My submissions — BitMono', description: SITE.description, noindex: true },
@@ -256,6 +260,51 @@ function profileBody(origin, p, crackmes) {
 </main>`
 }
 
+// Download page: real, indexable download links for non-JS crawlers (the React chooser only renders client-
+// side). Mirrors the primary picks; the full matrix stays behind the interactive UI. rel may be null if the
+// release feed is down — then we degrade to a GitHub Releases link.
+function downloadBody(origin, rel) {
+  const links = []
+  if (rel?.assets?.length) {
+    const cli = (tfm, os, arch, label) => {
+      const a = rel.assets.find((x) => x.kind === 'cli' && x.tfm === tfm && x.os === os && x.arch === arch)
+      return a ? `<li><a href="${origin}${esc(a.downloadUrl)}" class="text-acid hover:underline">.NET 8 CLI — ${label}</a></li>` : ''
+    }
+    links.push(cli('net8.0', 'win', 'x64', 'Windows x64'), cli('net8.0', 'linux', 'x64', 'Linux x64'), cli('net8.0', 'osx', 'arm64', 'macOS ARM64'))
+    const unity = rel.assets.find((x) => x.kind === 'unityPackage')
+    if (unity) links.push(`<li><a href="${origin}${esc(unity.downloadUrl)}" class="text-acid hover:underline">Unity — ${esc(unity.unityVersion)} .unitypackage</a></li>`)
+  }
+  const list = links.filter(Boolean).join('')
+  const ver = rel ? `v${esc(rel.version)}` : 'the latest release'
+  const releases = esc(rel?.htmlUrl || 'https://github.com/bitmono-project/BitMono/releases/latest')
+  return `<main class="mx-auto max-w-3xl px-6 py-12">
+  <h1 class="font-display text-4xl font-extrabold tracking-tight text-ink">Download BitMono</h1>
+  <p class="mt-2 font-mono text-sm text-muted">The free, open-source obfuscator for .NET &amp; Unity — ${ver}. Pick the exact CLI, Unity package or NuGet build for your setup.</p>
+  ${list ? `<ul class="mt-6 space-y-1 font-mono text-[13px]">${list}</ul>` : ''}
+  <p class="mt-6 font-mono text-[13px] text-muted">Embed it in your build via NuGet — <a href="https://www.nuget.org/packages/BitMono.Integration" class="text-acid hover:underline">BitMono.Integration</a> — or see every build on <a href="${releases}" class="text-acid hover:underline">GitHub Releases</a>.</p>
+</main>`
+}
+
+// SoftwareApplication for the download page — free .NET/Unity obfuscator, versioned to the current release.
+function downloadGraph(origin, rel) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    '@id': `${origin}/download#app`,
+    name: 'BitMono',
+    applicationCategory: 'DeveloperApplication',
+    applicationSubCategory: '.NET & Unity obfuscator',
+    operatingSystem: 'Windows, Linux, macOS',
+    softwareVersion: rel.version,
+    url: `${origin}/download`,
+    downloadUrl: `${origin}/download`,
+    softwareHelp: 'https://docs.bitmono.dev',
+    isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    author: { '@id': `${origin}/#org` },
+  }
+}
+
 // --- Per-route head. Dynamic routes fetch their own data (the API enforces visibility, so pending/private
 // items 404 here too); a missing crackme/profile returns a 404 status so Google doesn't log a soft-404. ---
 
@@ -301,10 +350,15 @@ export async function headFor(req, { apiUrl, origin }) {
   const p = req.path.length > 1 ? req.path.replace(/\/+$/, '') : '/'
   const r = ROUTES[p] ?? { title: SITE.title, description: SITE.description }
   let body = ''
+  let jsonld = p === '/' ? [homeGraph(origin)] : []
   if (p === '/') body = homeBody()
   else if (p === '/crackmes') {
     const list = await fetchJson(`${apiUrl}/api/crackmes?sort=date&pageSize=100`)
     body = listBody(origin, list?.items ?? [])
+  } else if (p === '/download') {
+    const rel = await fetchJson(`${apiUrl}/api/releases/latest`)
+    body = downloadBody(origin, rel)
+    if (rel) jsonld = [downloadGraph(origin, rel)]
   }
   return {
     title: r.title,
@@ -313,7 +367,7 @@ export async function headFor(req, { apiUrl, origin }) {
     image: `${origin}/og.png`,
     ogType: 'website',
     robots: r.noindex ? 'noindex,follow' : null,
-    jsonld: p === '/' ? [homeGraph(origin)] : [],
+    jsonld,
     body,
   }
 }
@@ -372,6 +426,7 @@ export async function buildSitemap(origin, { apiUrl }) {
     { loc: `${origin}/terms` },
     { loc: `${origin}/faq` },
     { loc: `${origin}/ranks` },
+    { loc: `${origin}/download` },
   ]
   const handles = new Set()
   for (let page = 1; page <= 100; page++) {

@@ -5,6 +5,7 @@ import type { Dict } from '../lib/translate'
 export const en: Dict = {
   nav: {
     obfuscate: 'Obfuscate',
+    download: 'Download',
     crackmes: 'Crackmes',
     leaderboard: 'Leaderboard',
     review: 'Review',

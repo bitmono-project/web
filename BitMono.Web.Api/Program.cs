@@ -3,6 +3,7 @@ using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Jobs;
 using BitMono.Web.Api.Auth;
 using BitMono.Web.Api.Obfuscation;
+using BitMono.Web.Api.ReleaseFeed;
 using BitMono.Web.Api.Security;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Data;
@@ -69,6 +70,33 @@ builder.Services.AddHttpClient("obfuscation", client =>
 #pragma warning restore EXTEXP0001
 builder.Services.AddScoped<IObfuscationService, RemoteObfuscationService>();
 
+// Release download chooser: cache the parsed GitHub release, and stream assets through /download/… .
+// The github client must drop the standard resilience handler (30s total timeout) or large self-contained
+// builds (~34 MB) would be aborted mid-stream, just like the obfuscation client above.
+builder.Services.AddMemoryCache();
+#pragma warning disable EXTEXP0001
+builder.Services.AddHttpClient("github", client =>
+{
+    client.BaseAddress = new Uri("https://api.github.com/");
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BitMono-Web");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+    client.Timeout = TimeSpan.FromMinutes(5);
+}).RemoveAllResilienceHandlers();
+
+// VirusTotal: submit each release asset once so the download page can show a live report + detection ratio.
+// Gated on VirusTotal:ApiKey (deploy secret); no key → the scan job no-ops and the page falls back to SHA-256.
+var virusTotalKey = builder.Configuration["VirusTotal:ApiKey"];
+builder.Services.AddHttpClient("virustotal", client =>
+{
+    client.BaseAddress = new Uri("https://www.virustotal.com/api/v3/");
+    if (!string.IsNullOrWhiteSpace(virusTotalKey))
+        client.DefaultRequestHeaders.Add("x-apikey", virusTotalKey);
+    client.Timeout = TimeSpan.FromSeconds(30);
+}).RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
+builder.Services.AddSingleton<ReleaseCatalog>();
+builder.Services.AddScoped<VirusTotalScanner>();
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -84,6 +112,11 @@ builder.Services.AddRateLimiter(options =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: http.GetClientIp(),
             factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
+    // /download proxies real bytes through us — cap per-IP so it can't be turned into a bandwidth pump.
+    options.AddPolicy("download", http =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: http.GetClientIp(),
+            factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
 });
 
 var app = builder.Build();
@@ -105,6 +138,10 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Lifetime.ApplicationStarted.Register(() =>
-    RecurringJob.AddOrUpdate<CleanupJob>("cleanup", j => j.RunAsync(CancellationToken.None), Cron.Hourly));
+{
+    RecurringJob.AddOrUpdate<CleanupJob>("cleanup", j => j.RunAsync(CancellationToken.None), Cron.Hourly);
+    // Work through the release's assets a few at a time (free VT API = 4 lookups/min). No-ops without a key.
+    RecurringJob.AddOrUpdate<VirusTotalScanner>("vtscan", s => s.RunAsync(CancellationToken.None), "*/2 * * * *");
+});
 
 app.Run();

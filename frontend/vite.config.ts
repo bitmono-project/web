@@ -14,6 +14,8 @@ export default defineConfig({
       '/obfuscate': { target: apiTarget, changeOrigin: true },
       '/version': { target: apiTarget, changeOrigin: true },
       '/protections': { target: apiTarget, changeOrigin: true },
+      // /download/<slug> is the file proxy; the bare /download page stays client-side (regex needs the slash).
+      '^/download/.+': { target: apiTarget, changeOrigin: true },
     },
   },
 })

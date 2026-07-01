@@ -16,6 +16,7 @@ import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
 import FAQ from './pages/FAQ'
 import Ranks from './pages/Ranks'
+import Download from './pages/Download'
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="terms" element={<Terms />} />
             <Route path="faq" element={<FAQ />} />
             <Route path="ranks" element={<Ranks />} />
+            <Route path="download" element={<Download />} />
           </Route>
         </Routes>
       </BrowserRouter>
