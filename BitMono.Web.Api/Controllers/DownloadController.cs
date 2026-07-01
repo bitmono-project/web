@@ -9,7 +9,7 @@ namespace BitMono.Web.Api.Controllers;
 [ApiController]
 public sealed class DownloadController(
     ReleaseCatalog catalog,
-    IHttpClientFactory factory,
+    GitHubHttp github,
     CrackmesDbContext db,
     ILogger<DownloadController> logger) : ControllerBase
 {
@@ -24,8 +24,7 @@ public sealed class DownloadController(
         if (asset is null)
             return NotFound();
 
-        var client = factory.CreateClient("github");
-        var upstream = await client.GetAsync(asset.SourceUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+        var upstream = await github.Client.GetAsync(asset.SourceUrl, HttpCompletionOption.ResponseHeadersRead, ct);
         if (!upstream.IsSuccessStatusCode)
         {
             logger.LogWarning("GitHub asset fetch failed ({Status}) for {Slug}", upstream.StatusCode, slug);

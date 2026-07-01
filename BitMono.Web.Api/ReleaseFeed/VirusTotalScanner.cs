@@ -13,7 +13,7 @@ namespace BitMono.Web.Api.ReleaseFeed;
 // ponytail: POST /urls hands VT the GitHub download URL to fetch+scan itself — no upload bandwidth and no
 // 32 MB file-size cap. The file becomes queryable by hash a little later, resolved on a subsequent run.
 public sealed class VirusTotalScanner(
-    IHttpClientFactory factory,
+    VirusTotalHttp virusTotal,
     CrackmesDbContext db,
     ReleaseCatalog catalog,
     IConfiguration cfg,
@@ -52,7 +52,7 @@ public sealed class VirusTotalScanner(
         if (todo.Count == 0)
             return;
 
-        var client = factory.CreateClient("virustotal");
+        var client = virusTotal.Client;
         foreach (var a in todo)
         {
             ct.ThrowIfCancellationRequested();

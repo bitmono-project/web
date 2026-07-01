@@ -70,30 +70,13 @@ builder.Services.AddHttpClient("obfuscation", client =>
 #pragma warning restore EXTEXP0001
 builder.Services.AddScoped<IObfuscationService, RemoteObfuscationService>();
 
-// Release download chooser: cache the parsed GitHub release, and stream assets through /download/… .
-// The github client must drop the standard resilience handler (30s total timeout) or large self-contained
-// builds (~34 MB) would be aborted mid-stream, just like the obfuscation client above.
+// Release download chooser + VirusTotal scanning. GitHub and VirusTotal are external third-party APIs, so
+// they get plain HttpClients (GitHubHttp / VirusTotalHttp) instead of IHttpClientFactory — Aspire's default
+// pipeline (service discovery for internal resources + standard resilience) fails these external calls in the
+// deployed container. VirusTotal is gated on VirusTotal:ApiKey (deploy secret); no key → the scan job no-ops.
 builder.Services.AddMemoryCache();
-#pragma warning disable EXTEXP0001
-builder.Services.AddHttpClient("github", client =>
-{
-    client.BaseAddress = new Uri("https://api.github.com/");
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("BitMono-Web");
-    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-    client.Timeout = TimeSpan.FromMinutes(5);
-}).RemoveAllResilienceHandlers();
-
-// VirusTotal: submit each release asset once so the download page can show a live report + detection ratio.
-// Gated on VirusTotal:ApiKey (deploy secret); no key → the scan job no-ops and the page falls back to SHA-256.
-var virusTotalKey = builder.Configuration["VirusTotal:ApiKey"];
-builder.Services.AddHttpClient("virustotal", client =>
-{
-    client.BaseAddress = new Uri("https://www.virustotal.com/api/v3/");
-    if (!string.IsNullOrWhiteSpace(virusTotalKey))
-        client.DefaultRequestHeaders.Add("x-apikey", virusTotalKey);
-    client.Timeout = TimeSpan.FromSeconds(30);
-}).RemoveAllResilienceHandlers();
-#pragma warning restore EXTEXP0001
+builder.Services.AddSingleton<GitHubHttp>();
+builder.Services.AddSingleton<VirusTotalHttp>();
 builder.Services.AddSingleton<ReleaseCatalog>();
 builder.Services.AddScoped<VirusTotalScanner>();
 
