@@ -14,6 +14,8 @@ import Submissions from './pages/Submissions'
 import Admin from './pages/Admin'
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
+import FAQ from './pages/FAQ'
+import Ranks from './pages/Ranks'
 
 export default function App() {
   return (
@@ -34,6 +36,8 @@ export default function App() {
             <Route path="admin" element={<Admin />} />
             <Route path="privacy" element={<Privacy />} />
             <Route path="terms" element={<Terms />} />
+            <Route path="faq" element={<FAQ />} />
+            <Route path="ranks" element={<Ranks />} />
           </Route>
         </Routes>
       </BrowserRouter>

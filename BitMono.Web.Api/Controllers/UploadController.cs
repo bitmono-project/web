@@ -27,6 +27,7 @@ public sealed class UploadController(
 {
     [HttpPost]
     [EnableRateLimiting("upload")]
+    [RequestSizeLimit(52L * 1024 * 1024)] // ~50 MB crackme + multipart overhead; Kestrel's default (~28 MB) would 413 first
     public async Task<IActionResult> Submit([FromForm] UploadForm form, CancellationToken ct)
     {
         // Cloudflare Turnstile — Turnstile injects "cf-turnstile-response" into the form. No-op if unset.
@@ -34,7 +35,7 @@ public sealed class UploadController(
         if (!await turnstile.VerifyAsync(captchaToken, HttpContext.GetClientIp(), ct))
             return BadRequest("Captcha check failed — please try again.");
 
-        var max = cfg.GetValue<long?>("Crackmes:MaxUploadBytes") ?? 10 * 1024 * 1024;
+        var max = cfg.GetValue<long?>("Crackmes:MaxUploadBytes") ?? 50 * 1024 * 1024;
         var file = form.File;
         if (file is null || file.Length == 0 || file.Length > max)
             return BadRequest($"File must be between 1 byte and {max / (1024 * 1024)} MB.");

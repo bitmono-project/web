@@ -197,7 +197,7 @@ export default function Upload() {
         )}
 
         <div>
-          <label className={label} htmlFor="File">File <span className="normal-case text-faint">(.dll / .exe / .zip, ≤ 10 MB)</span></label>
+          <label className={label} htmlFor="File">File <span className="normal-case text-faint">(.dll / .exe / .zip, ≤ 50 MB)</span></label>
           <label htmlFor="File" className="flex cursor-pointer items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 transition-colors hover:border-acid">
             <span className="rounded bg-line px-3 py-1 font-mono text-[13px] text-ink">Choose file</span>
             <span className="truncate font-mono text-[13px] text-faint">{fileName || 'no file chosen'}</span>

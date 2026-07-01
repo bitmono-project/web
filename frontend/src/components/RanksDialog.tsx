@@ -1,19 +1,11 @@
-// The rank ladder — mirrors the server's Ranks.cs (static, single small table). Shown in a modal
-// when you click your rank, with your current tier highlighted.
-const RANKS = [
-  { name: 'script kiddie', minPoints: 0 },
-  { name: 'unpacker', minPoints: 250 },
-  { name: 'patcher', minPoints: 750 },
-  { name: 'disassembler', minPoints: 2_000 },
-  { name: 'deobfuscator', minPoints: 5_000 },
-  { name: 'devirtualizer', minPoints: 12_000 },
-  { name: 'ghost in the IL', minPoints: 25_000 },
-  { name: 'nop-sled legend', minPoints: 50_000 },
-]
+import { Link } from 'react-router-dom'
+import { RANKS, rankIndexForPoints } from '../lib/ranks'
 
-export function RanksDialog({ points, onClose }: { points: number; onClose: () => void }) {
-  let currentIdx = 0
-  RANKS.forEach((r, i) => { if (points >= r.minPoints) currentIdx = i })
+// Shown in a modal when a rank is clicked, with the relevant tier highlighted. `self` is true when
+// the highlighted rank is the viewer's own (leaderboard "my rank" or your own profile) — otherwise
+// it's the profile owner's rank, so we don't claim "you're here".
+export function RanksDialog({ points, self = true, onClose }: { points: number; self?: boolean; onClose: () => void }) {
+  const currentIdx = rankIndexForPoints(points)
 
   return (
     <div onClick={onClose} className="fixed inset-0 z-[80] flex items-center justify-center bg-void/80 p-6 backdrop-blur-sm">
@@ -27,14 +19,33 @@ export function RanksDialog({ points, onClose }: { points: number; onClose: () =
           {RANKS.map((r, i) => {
             const here = i === currentIdx
             return (
-              <li key={r.name} className={`flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-[13px] ${here ? 'border-acid/50 bg-acid/10' : 'border-transparent'}`}>
-                <span className={here ? 'text-acid' : 'text-muted'}>{r.name}</span>
-                {here && <span className="rounded-full border border-acid/50 px-2 py-px text-[10px] uppercase tracking-wider text-acid">you're here</span>}
+              <li
+                key={r.slug}
+                className="flex items-center gap-2.5 rounded-lg border px-3 py-2 font-mono text-[13px]"
+                style={{ borderColor: here ? `${r.color}66` : 'transparent', background: here ? `${r.color}14` : 'transparent' }}
+              >
+                <img src={`/rank-${r.slug}.png`} alt="" className={`h-7 w-7 shrink-0 ${here ? '' : 'opacity-60'}`} />
+                <Link
+                  to={`/ranks#${r.slug}`}
+                  onClick={onClose}
+                  className={`hover:underline ${here ? '' : 'text-muted'}`}
+                  style={here ? { color: r.color } : undefined}
+                >
+                  {r.name}
+                </Link>
+                {here && (
+                  <span className="rounded-full border px-2 py-px text-[10px] uppercase tracking-wider" style={{ color: r.color, borderColor: `${r.color}80` }}>
+                    {self ? "you're here" : 'current rank'}
+                  </span>
+                )}
                 <span className="ml-auto text-faint">{r.minPoints.toLocaleString()}+</span>
               </li>
             )
           })}
         </ol>
+        <Link to="/ranks" onClick={onClose} className="mt-4 block text-center font-mono text-[12px] text-acid hover:underline">
+          See all ranks →
+        </Link>
       </div>
     </div>
   )

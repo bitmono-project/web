@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { type UserProfile, type ProfileCrackme, getUserProfile, getUserCrackmes, difficultyLabel, formatDate } from '../lib/crackmes'
 import { RanksDialog } from '../components/RanksDialog'
+import { useAuth } from '../lib/auth'
 import { Tooltip } from '../components/Tooltip'
 import { useTitle } from '../lib/useTitle'
 
 export default function Profile() {
   const { handle = '' } = useParams()
+  const { me } = useAuth()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [crackmes, setCrackmes] = useState<ProfileCrackme[]>([])
   const [state, setState] = useState<'loading' | 'ok' | 'missing'>('loading')
@@ -64,7 +66,7 @@ export default function Profile() {
         <StatCard label="Position" value={profile.position ? `#${profile.position}` : '—'} />
       </div>
 
-      {ranksOpen && <RanksDialog points={profile.points} onClose={() => setRanksOpen(false)} />}
+      {ranksOpen && <RanksDialog points={profile.points} self={me?.handle === profile.handle} onClose={() => setRanksOpen(false)} />}
 
       {profile.badges.length > 0 && (
         <div className="mt-6 flex flex-wrap gap-2">

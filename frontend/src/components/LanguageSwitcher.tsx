@@ -6,13 +6,13 @@ import { LANGUAGES, useI18n, type Lang } from '../lib/i18n'
 export function LanguageSwitcher() {
   const { lang, setLang, t } = useI18n()
   return (
-    <label className="relative inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-muted transition-colors hover:border-acid hover:text-acid focus-within:border-acid focus-within:text-acid">
+    <label className="relative inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1.5 text-muted transition-colors hover:border-acid hover:text-acid focus-within:border-acid focus-within:text-acid sm:px-3">
       <GlobeIcon />
       <select
         value={lang}
         onChange={(e) => setLang(e.target.value as Lang)}
         aria-label={t('nav.language')}
-        className="cursor-pointer appearance-none bg-transparent pe-3.5 font-mono text-[13px] text-inherit outline-none"
+        className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent font-mono text-[13px] text-inherit opacity-0 outline-none sm:static sm:h-auto sm:w-auto sm:pe-3.5 sm:opacity-100"
       >
         {LANGUAGES.map((l) => (
           <option key={l.code} value={l.code} className="bg-surface text-ink">{l.native}</option>
@@ -31,7 +31,7 @@ const GlobeIcon = () => (
 )
 
 const CaretIcon = () => (
-  <svg className="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2" width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+  <svg className="pointer-events-none absolute end-2 top-1/2 hidden -translate-y-1/2 sm:block" width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
     <path d="M2.5 4.5 6 8l3.5-3.5" />
   </svg>
 )

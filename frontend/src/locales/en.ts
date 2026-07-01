@@ -19,6 +19,7 @@ export const en: Dict = {
   },
   footer: {
     copy: '© bitmono — free & open-source obfuscator for .NET & Mono · web {version}',
+    faq: 'faq',
     privacy: 'privacy',
     terms: 'terms',
     contact: 'contact',

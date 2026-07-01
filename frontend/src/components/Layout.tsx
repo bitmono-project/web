@@ -22,12 +22,12 @@ function Header() {
   const { me, loading, signOut } = useAuth()
   const t = useT()
   return (
-    <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+    <header className="mx-auto flex max-w-6xl flex-col items-start gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
       <Link to="/" className="flex items-center gap-3">
         <img src="/mark.png" alt="BitMono" className="h-8 w-8" />
         <span className="font-mono text-sm font-bold tracking-tight">bitmono</span>
       </Link>
-      <nav className="flex items-center gap-5 font-mono text-[13px] text-muted">
+      <nav className="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[13px] text-muted sm:gap-x-5">
         <Link to="/#obfuscate" className="hidden transition-colors hover:text-ink sm:inline">{t('nav.obfuscate')}</Link>
         <Link to="/crackmes" className="transition-colors hover:text-ink">{t('nav.crackmes')}</Link>
         <Link to="/leaderboard" className="transition-colors hover:text-ink">{t('nav.leaderboard')}</Link>
@@ -66,6 +66,7 @@ function Footer() {
       <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
         <span>{t('footer.copy', { version: getAppVersion() })}</span>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
+          <Link to="/faq" className="transition-colors hover:text-ink">{t('footer.faq')}</Link>
           <Link to="/privacy" className="transition-colors hover:text-ink">{t('footer.privacy')}</Link>
           <Link to="/terms" className="transition-colors hover:text-ink">{t('footer.terms')}</Link>
           <a href="mailto:hello@bitmono.dev" className="transition-colors hover:text-ink">{t('footer.contact')}</a>
