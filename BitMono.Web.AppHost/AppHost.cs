@@ -150,6 +150,7 @@ else
     WireParam("Crackmes__ZipPassword", "ZipPassword", secret: true);
         WireParam("Sentry__Dsn", "SentryDsn", secret: true);   // else the runner's DSN never reaches the api container
     WireParam("VirusTotal__ApiKey", "VirusTotalApiKey", secret: true);   // optional — enables release VT scanning
+    WireParam("GitHub__ApiToken", "GitHubApiToken", secret: true);   // raises GitHub API rate limit 60→5000/hr for the release feed
 
     deployWeb = builder.AddDockerfile("web", "../frontend")
         .WithHttpEndpoint(port: WebDeployPort, targetPort: WebDeployPort, env: "PORT")

@@ -27,6 +27,7 @@ public sealed class ReleaseCatalog(GitHubHttp github, IMemoryCache cache, ILogge
 
     private readonly SemaphoreSlim _lock = new(1, 1);
     private ReleaseCatalogData? _lastGood;
+    private DateTime _cooldownUntil = DateTime.MinValue;
 
     public async Task<ReleaseCatalogData?> GetAsync(CancellationToken ct)
     {
@@ -39,6 +40,11 @@ public sealed class ReleaseCatalog(GitHubHttp github, IMemoryCache cache, ILogge
             if (cache.TryGetValue(CacheKey, out cached))
                 return cached;
 
+            // Back off after a failure so a broken/rate-limited GitHub isn't hammered on every request
+            // (which is how the unauthenticated 60/hr limit got exhausted in the first place).
+            if (DateTime.UtcNow < _cooldownUntil)
+                return _lastGood;
+
             var fresh = await FetchAsync(ct);
             if (fresh is not null)
             {
@@ -46,6 +52,7 @@ public sealed class ReleaseCatalog(GitHubHttp github, IMemoryCache cache, ILogge
                 cache.Set(CacheKey, fresh, Ttl);
                 return fresh;
             }
+            _cooldownUntil = DateTime.UtcNow.AddMinutes(1);
             return _lastGood;   // GitHub unreachable / rate-limited → last good beats a broken page
         }
         finally

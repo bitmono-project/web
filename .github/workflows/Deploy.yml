@@ -74,3 +74,5 @@ jobs:
           Parameters__SentryDsn: ${{ secrets.SENTRY_DSN }}
           # VirusTotal API key — optional; enables live release scan badges on the download page
           Parameters__VirusTotalApiKey: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          # GitHub API token — raises the release-feed rate limit from 60/hr (shared IP) to 5,000/hr
+          Parameters__GitHubApiToken: ${{ secrets.GH_API_TOKEN }}

@@ -10,7 +10,7 @@ public sealed class GitHubHttp
 {
     public HttpClient Client { get; }
 
-    public GitHubHttp()
+    public GitHubHttp(IConfiguration cfg)
     {
         Client = new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) })
         {
@@ -19,6 +19,12 @@ public sealed class GitHubHttp
         };
         Client.DefaultRequestHeaders.UserAgent.ParseAdd("BitMono-Web");
         Client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        // Unauthenticated GitHub API is 60 req/hr per IP — trivially exhausted on a shared datacenter IP
+        // (prod hit exactly this: 403 "rate limit exceeded"). A token — even one with no scopes, for public
+        // data — raises it to 5,000/hr. Optional: without it we just fall back to the unauthenticated limit.
+        var token = cfg["GitHub:ApiToken"];
+        if (!string.IsNullOrWhiteSpace(token))
+            Client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
     }
 }
 
