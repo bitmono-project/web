@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { startObfuscation, waitForResult, downloadUrl, getProtections, type ProtectionInfo } from '../lib/api'
 import { parseAssemblyRefs, missingRefs } from '../lib/peRefs'
 
@@ -215,7 +216,18 @@ export function ObfuscatePanel() {
             {phase === 'done' && result && (
               <div className="flex flex-col items-center gap-3">
                 <div className="font-mono text-sm text-acid">✓ protected · input wiped</div>
-                <a href={downloadUrl(result.id, result.name)} className="btn-acid" download={result.name}>download ↓</a>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <a href={downloadUrl(result.id, result.name)} className="btn-acid" download={result.name}>download ↓</a>
+                  {/* Carry the id, name and applied protections in the URL so the publish form is prefilled
+                      and survives the login round-trip (publish needs an account; obfuscating doesn't). */}
+                  <Link
+                    to={`/upload?fromObfuscation=${result.id}&name=${encodeURIComponent(result.name)}&protections=${encodeURIComponent([...selected].join(','))}`}
+                    className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-acid hover:text-acid"
+                  >
+                    publish as challenge →
+                  </Link>
+                </div>
+                <p className="font-mono text-[11px] text-faint">share it for others to crack — enters the gallery after review</p>
               </div>
             )}
           </div>

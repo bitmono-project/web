@@ -1,5 +1,5 @@
 using BitMono.Web.Api.Models;
-using BitMono.Web.Api.Releases;
+using BitMono.Web.Api.ReleaseFeed;
 
 namespace BitMono.Web.Tests;
 

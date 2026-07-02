@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { getProtections, type ProtectionInfo } from '../lib/api'
 import { PLATFORMS, VERIFICATION_KINDS } from '../lib/crackmes'
 import { getConfig } from '../lib/config'
@@ -32,8 +32,16 @@ const label = 'mb-1 block font-mono text-[11px] uppercase tracking-wider text-fa
 
 export default function Upload() {
   const { me, loading } = useAuth()
+  const [searchParams] = useSearchParams()
+  const location = useLocation()
+  // Publish-from-obfuscation mode: the binary is a finished server-side obfuscation (by id), not an upload.
+  // id/name/applied-protections ride in the URL so they survive the login round-trip and prefill the form.
+  const fromObfuscation = searchParams.get('fromObfuscation')
+  const obfName = searchParams.get('name') ?? ''
   const [catalog, setCatalog] = useState<ProtectionInfo[]>([])
-  const [protections, setProtections] = useState<Set<string>>(new Set())
+  const [protections, setProtections] = useState<Set<string>>(
+    () => new Set((searchParams.get('protections') ?? '').split(',').filter(Boolean)),
+  )
   const [accepted, setAccepted] = useState([false, false, false])
   const [reactionsEnabled, setReactionsEnabled] = useState(true)
   const [commentReactionsEnabled, setCommentReactionsEnabled] = useState(true)
@@ -61,7 +69,8 @@ export default function Upload() {
   if (loading) return null
   if (!me) return (
     <main className="mx-auto max-w-2xl px-6 py-20 text-center font-mono text-sm text-muted">
-      You need an account to submit. <Link to="/login?returnUrl=/upload" className="text-acid hover:underline">Sign in →</Link>
+      You need an account to {fromObfuscation ? 'publish' : 'submit'}.{' '}
+      <Link to={`/login?returnUrl=${encodeURIComponent(location.pathname + location.search)}`} className="text-acid hover:underline">Sign in →</Link>
     </main>
   )
 
@@ -76,18 +85,22 @@ export default function Upload() {
     if (!accepted.every(Boolean)) { setError('Please accept all three terms.'); return }
     const formEl = e.currentTarget
     const data = new FormData(formEl)
-    if (!(data.get('File') as File)?.size) { setError('Choose a file to upload.'); return }
+    if (!fromObfuscation && !(data.get('File') as File)?.size) { setError('Choose a file to upload.'); return }
     for (const p of protections) data.append('Protections', p)
     data.set('AcceptOriginal', String(accepted[0]))
     data.set('AcceptLegal', String(accepted[1]))
     data.set('AcceptVm', String(accepted[2]))
     data.set('ReactionsEnabled', String(reactionsEnabled))
     data.set('CommentReactionsEnabled', String(commentReactionsEnabled))
+    // From-obfuscation: the server already holds the obfuscated binary under this id — send its name,
+    // not a file, and post to the bridge endpoint that promotes it and stamps the BitMono version.
+    if (fromObfuscation) data.set('FileName', obfName)
 
     setPhase('sending')
     setError('')
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: data })
+      const endpoint = fromObfuscation ? `/api/upload/from-obfuscation/${fromObfuscation}` : '/api/upload'
+      const res = await fetch(endpoint, { method: 'POST', body: data })
       if (res.status === 202) { setPhase('done'); return }
       setError((await res.text().catch(() => '')) || `Upload failed (${res.status})`)
       setPhase('error')
@@ -113,9 +126,13 @@ export default function Upload() {
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">Submit a crackme</h1>
+      <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink">
+        {fromObfuscation ? 'Publish your challenge' : 'Submit a crackme'}
+      </h1>
       <p className="mt-2 font-mono text-sm text-muted">
-        Upload a single assembly (.dll/.exe) or a password-less .zip — we wrap it in a password-protected zip on download.
+        {fromObfuscation
+          ? <>Just obfuscated <span className="text-ink">{obfName || 'your assembly'}</span> with BitMono — add the details and publish it for others to crack.</>
+          : 'Upload a single assembly (.dll/.exe) or a password-less .zip — we wrap it in a password-protected zip on download.'}
       </p>
 
       <form onSubmit={submit} className="mt-8 space-y-5">
@@ -155,9 +172,11 @@ export default function Upload() {
           </div>
         </div>
 
-        <label className="flex items-center gap-2 font-mono text-[13px] text-muted">
-          <input type="checkbox" name="IsBitMonoObfuscated" value="true" defaultChecked /> Obfuscated with BitMono
-        </label>
+        {!fromObfuscation && (
+          <label className="flex items-center gap-2 font-mono text-[13px] text-muted">
+            <input type="checkbox" name="IsBitMonoObfuscated" value="true" defaultChecked /> Obfuscated with BitMono
+          </label>
+        )}
 
         <div className="space-y-1">
           <label className="flex items-center gap-2 font-mono text-[13px] text-muted">
@@ -196,15 +215,23 @@ export default function Upload() {
           </div>
         )}
 
-        <div>
-          <label className={label} htmlFor="File">File <span className="normal-case text-faint">(.dll / .exe / .zip, ≤ 50 MB)</span></label>
-          <label htmlFor="File" className="flex cursor-pointer items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 transition-colors hover:border-acid">
-            <span className="rounded bg-line px-3 py-1 font-mono text-[13px] text-ink">Choose file</span>
-            <span className="truncate font-mono text-[13px] text-faint">{fileName || 'no file chosen'}</span>
-          </label>
-          <input id="File" name="File" type="file" accept=".dll,.exe,.zip" className="sr-only"
-            onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')} />
-        </div>
+        {fromObfuscation ? (
+          <div className="flex items-center gap-3 rounded-lg border border-acid/40 bg-void/40 px-3 py-2.5 font-mono text-[12px] text-muted">
+            <span className="text-acid">✓ obfuscated on the server</span>
+            <span className="min-w-0 flex-1 truncate text-ink">{obfName || 'your assembly'}</span>
+            <span className="shrink-0 text-faint">no upload needed</span>
+          </div>
+        ) : (
+          <div>
+            <label className={label} htmlFor="File">File <span className="normal-case text-faint">(.dll / .exe / .zip, ≤ 50 MB)</span></label>
+            <label htmlFor="File" className="flex cursor-pointer items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 transition-colors hover:border-acid">
+              <span className="rounded bg-line px-3 py-1 font-mono text-[13px] text-ink">Choose file</span>
+              <span className="truncate font-mono text-[13px] text-faint">{fileName || 'no file chosen'}</span>
+            </label>
+            <input id="File" name="File" type="file" accept=".dll,.exe,.zip" className="sr-only"
+              onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')} />
+          </div>
+        )}
 
         <div className="space-y-2 rounded-lg border border-line bg-surface/30 p-4">
           {TERMS.map((t, i) => (

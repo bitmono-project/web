@@ -27,6 +27,13 @@ public class Crackme
     // Authoritative when obfuscated through BitMono; author-stated otherwise. Owned JSON.
     public List<AppliedProtection> ProtectionsApplied { get; set; } = [];
 
+    // BitMono provenance — set only when the site obfuscated-and-published (null for hand-uploaded).
+    // Matches Safeturned's release shape: a display string + a packed uint ((major<<16)|(minor<<8)|patch,
+    // stored as bigint) that sorts correctly where the string doesn't (0.9.0 vs 0.43.0) — the version axis
+    // the regression matrix groups on. Packed comes straight from the engine's /version.
+    [MaxLength(50)] public string? BitMonoVersion { get; set; }
+    public uint? BitMonoVersionPacked { get; set; }
+
     // File metadata — bytes are in R2.
     [Required, MaxLength(512)] public string StorageKey { get; set; } = null!;
     [Required, MaxLength(64)] public string Sha256 { get; set; } = null!;

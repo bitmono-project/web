@@ -146,7 +146,7 @@ export default function Download() {
               </div>
             )}
 
-            <AntivirusNote />
+            <AntivirusNote asset={cliAsset} />
 
             {cli.length > 0 && (
               <div>
@@ -181,7 +181,7 @@ export default function Download() {
                 {unityAsset
                   ? <DownloadCard asset={unityAsset} />
                   : <p className="font-mono text-[12px] text-muted">No {unityFormat === 'upm' ? 'UPM' : '.unitypackage'} build for that Unity version.</p>}
-                <AntivirusNote />
+                <AntivirusNote asset={unityAsset} />
               </>
             )}
           </div>
@@ -258,14 +258,18 @@ function DownloadCard({ asset }: { asset: ReleaseAsset }) {
   )
 }
 
-function AntivirusNote() {
+function AntivirusNote({ asset }: { asset?: ReleaseAsset | null }) {
+  // Deep-link to this build's VirusTotal analysis (file report once scanned, else a hash search); only fall
+  // back to VT's home if no asset resolved — then there's no "file above" to check anyway.
+  const href = asset?.sha256 ? vtUrl(asset) : 'https://www.virustotal.com'
   return (
     <div className="flex items-start gap-2.5 rounded-xl border border-line bg-void/40 p-3.5 font-mono text-[11px] leading-relaxed text-muted">
       <span className="mt-px text-acid">⚠</span>
       <span>
         Obfuscators and packers trip antivirus <em className="text-ink/80 not-italic">by design</em> — a Defender flag
-        isn't proof of anything. Verify the SHA-256 above, and check the file on VirusTotal if you're unsure. BitMono is
-        open-source and built in public CI.
+        isn't proof of anything. Verify the SHA-256 above, and check the file on{' '}
+        <a href={href} target="_blank" rel="noreferrer" className="text-acid hover:underline">VirusTotal</a>{' '}
+        if you're unsure. BitMono is open-source and built in public CI.
       </span>
     </div>
   )
@@ -341,16 +345,20 @@ function Section({ label, body, children }: { label: string; body: string; child
   )
 }
 
-// VirusTotal link. A live /gui/file link only works once the file is on VT (our scan job submits it), so we
-// only deep-link there when the scan is "done" — with the detection ratio. Otherwise we fall back to a search
-// URL that never 404s. See VirusTotalScanner on the backend.
+// VirusTotal link that never 404s: the live /gui/file report only exists once our scan job has submitted the
+// file, so deep-link there only when the scan is "done"; otherwise fall back to a hash search. Shared with the
+// AntivirusNote so both point at the same build. See VirusTotalScanner on the backend.
+function vtUrl(asset: ReleaseAsset): string {
+  const path = asset.vt?.status === 'done' ? 'gui/file' : 'gui/search'
+  return `https://www.virustotal.com/${path}/${asset.sha256}`
+}
+
 function VirusTotal({ asset }: { asset: ReleaseAsset }) {
-  const sha = asset.sha256 as string
   const vt = asset.vt
   if (vt?.status === 'done') {
     const clean = vt.flagged === 0
     return (
-      <a href={`https://www.virustotal.com/gui/file/${sha}`} target="_blank" rel="noreferrer"
+      <a href={vtUrl(asset)} target="_blank" rel="noreferrer"
         className={`ml-auto transition-colors hover:underline ${clean ? 'text-acid' : 'text-amber-400'}`}
         title="VirusTotal report">
         {clean ? '✓' : '⚠'} {vt.flagged}/{vt.total} VirusTotal ↗
@@ -358,7 +366,7 @@ function VirusTotal({ asset }: { asset: ReleaseAsset }) {
     )
   }
   return (
-    <a href={`https://www.virustotal.com/gui/search/${sha}`} target="_blank" rel="noreferrer"
+    <a href={vtUrl(asset)} target="_blank" rel="noreferrer"
       className="ml-auto text-faint transition-colors hover:text-acid">
       {vt?.status === 'pending' ? 'VirusTotal · scanning…' : 'VirusTotal ↗'}
     </a>

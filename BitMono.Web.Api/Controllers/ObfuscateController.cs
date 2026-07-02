@@ -140,7 +140,8 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
         var bytes = await store.TryReadOutputAsync(id, ct);
         if (bytes is null)
             return NotFound();
-        store.DeleteOutput(id);
+        // Don't consume on download — leave the output for the hourly sweep so the user can also publish it
+        // as a challenge (or re-download). Publishing deletes it explicitly once promoted to permanent storage.
         return File(bytes, "application/octet-stream", name ?? $"{id:N}.dll");
     }
 }
