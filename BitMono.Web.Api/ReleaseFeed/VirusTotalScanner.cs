@@ -5,13 +5,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BitMono.Web.Api.ReleaseFeed;
 
-// Submits each release asset to VirusTotal once, so the download page can show a live report + detection
-// ratio instead of a dead /gui/file link. Runs as a throttled Hangfire job: the free public API allows
-// 4 lookups/min, so we take a small batch per run and rely on the recurring schedule to work through the
-// ~64 assets over a handful of minutes. Entirely gated on VirusTotal:ApiKey — no key, no-op (the page then
-// falls back to the SHA-256 + a search link).
-// ponytail: POST /urls hands VT the GitHub download URL to fetch+scan itself — no upload bandwidth and no
-// 32 MB file-size cap. The file becomes queryable by hash a little later, resolved on a subsequent run.
+// Gets each release asset onto VirusTotal once, so the download page can show a live report + detection ratio
+// instead of a dead /gui/file link. Runs as a throttled Hangfire job — the free public API allows 4 lookups/
+// min, so we take a tiny batch per run and let the recurring schedule work through the assets over ~an hour.
+// Gated on VirusTotal:ApiKey — no key, no-op (the page then falls back to the SHA-256 + a search link).
+//
+// We UPLOAD the file bytes (POST /files) rather than submit the URL (POST /urls): a URL submission doesn't
+// reliably produce a by-hash file report, so GET /files/{sha} would 404 forever and every asset stayed
+// "pending". Uploading makes the file immediately known to VT (GET returns 200, then last_analysis_stats
+// populates once analysis finishes). Files over VT's 32 MB standard-upload cap are skipped (they keep the
+// SHA-256 + search fallback). ponytail: skip >32 MB rather than add the large-file upload dance.
 public sealed class VirusTotalScanner(
     IHttpClientFactory factory,
     CrackmesDbContext db,
@@ -19,7 +22,8 @@ public sealed class VirusTotalScanner(
     IConfiguration cfg,
     ILogger<VirusTotalScanner> logger)
 {
-    private const int BatchPerRun = 4;                            // ~one minute's worth of the free quota
+    private const int BatchPerRun = 2;                          // GET + POST per new asset ≈ the free 4/min cap
+    private const long MaxUploadBytes = 32L * 1024 * 1024;      // VT standard POST /files limit
     private static readonly TimeSpan Refresh = TimeSpan.FromDays(7);   // re-pull "done" verdicts weekly
 
     public async Task RunAsync(CancellationToken ct)
@@ -42,7 +46,7 @@ public sealed class VirusTotalScanner(
         var existing = await db.ReleaseScans.ToDictionaryAsync(x => x.Sha256, ct);
         var now = DateTime.UtcNow;
 
-        // Work list: never scanned, still pending (needs re-check), or a stale "done" verdict.
+        // Work list: never scanned, still pending (analysis queued — re-check), or a stale "done" verdict.
         var todo = assets
             .Where(a => !existing.TryGetValue(a.Sha256!, out var e)
                         || e.Status == "pending"
@@ -52,53 +56,72 @@ public sealed class VirusTotalScanner(
         if (todo.Count == 0)
             return;
 
-        var client = factory.CreateClient("virustotal");
+        var vt = factory.CreateClient("virustotal");
+        var gh = factory.CreateClient("github");
         foreach (var a in todo)
         {
             ct.ThrowIfCancellationRequested();
-            if (!await ScanOneAsync(client, a.Sha256!, a.SourceUrl, ct))
-                break;   // rate-limited — stop this run, the schedule picks it back up
+            if (!await ScanOneAsync(vt, gh, a.Sha256!, a.SourceUrl, a.Size, ct))
+                break;   // rate-limited — stop this run, the schedule resumes next time
         }
     }
 
     // Returns false when VT rate-limits us (so the caller stops the batch), true otherwise.
-    private async Task<bool> ScanOneAsync(HttpClient client, string sha, string url, CancellationToken ct)
+    private async Task<bool> ScanOneAsync(HttpClient vt, HttpClient gh, string sha, string url, long size, CancellationToken ct)
     {
         try
         {
-            var res = await client.GetAsync($"files/{sha}", ct);
+            var res = await vt.GetAsync($"files/{sha}", ct);
             if (res.StatusCode == HttpStatusCode.TooManyRequests)
                 return false;
 
             if (res.IsSuccessStatusCode)
             {
-                using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
-                var stats = doc.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("last_analysis_stats");
-                var flagged = stats.GetProperty("malicious").GetInt32() + stats.GetProperty("suspicious").GetInt32();
-                var total = 0;
-                foreach (var p in stats.EnumerateObject())
-                    total += p.Value.GetInt32();
-                await UpsertAsync(sha, "done", flagged, total, ct);
+                var (flagged, total) = ParseStats(await res.Content.ReadAsStringAsync(ct));
+                // total == 0 → VT knows the file but analysis is still queued; stay pending, re-check later.
+                await UpsertAsync(sha, total > 0 ? "done" : "pending", flagged, total, ct);
+                return true;
             }
-            else if (res.StatusCode == HttpStatusCode.NotFound)
-            {
-                // Unknown to VT — ask it to fetch + scan the GitHub URL, then mark pending for a later re-check.
-                using var form = new FormUrlEncodedContent(new Dictionary<string, string> { ["url"] = url });
-                var sub = await client.PostAsync("urls", form, ct);
-                if (sub.StatusCode == HttpStatusCode.TooManyRequests)
-                    return false;
-                await UpsertAsync(sha, "pending", 0, 0, ct);
-            }
-            else
+
+            if (res.StatusCode != HttpStatusCode.NotFound)
             {
                 logger.LogWarning("VirusTotal files/{Sha} returned {Status}", sha, res.StatusCode);
+                return true;
             }
+
+            // Unknown to VT → upload the bytes so it produces a real by-hash report. Skip over-cap files.
+            if (size > MaxUploadBytes)
+                return true;
+
+            byte[] bytes;
+            try { bytes = await gh.GetByteArrayAsync(url, ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "Fetch for VirusTotal upload failed for {Sha}", sha); return true; }
+
+            using var form = new MultipartFormDataContent();
+            form.Add(new ByteArrayContent(bytes), "file", sha);
+            var post = await vt.PostAsync("files", form, ct);
+            if (post.StatusCode == HttpStatusCode.TooManyRequests)
+                return false;
+            if (!post.IsSuccessStatusCode)
+                logger.LogWarning("VirusTotal upload for {Sha} returned {Status}", sha, post.StatusCode);
+            await UpsertAsync(sha, "pending", 0, 0, ct);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "VirusTotal scan failed for {Sha}", sha);
         }
         return true;
+    }
+
+    private static (int flagged, int total) ParseStats(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var stats = doc.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("last_analysis_stats");
+        var flagged = stats.GetProperty("malicious").GetInt32() + stats.GetProperty("suspicious").GetInt32();
+        var total = 0;
+        foreach (var p in stats.EnumerateObject())
+            total += p.Value.GetInt32();
+        return (flagged, total);
     }
 
     private async Task UpsertAsync(string sha, string status, int flagged, int total, CancellationToken ct)
