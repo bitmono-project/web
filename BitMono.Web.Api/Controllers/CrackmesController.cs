@@ -107,13 +107,13 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
                 : null;
             return Ok(Tombstone(c, takedownHandle));
         }
-        // Moderators/admins can open a not-yet-approved (pending/rejected) crackme to preview the full page;
-        // the public still gets 404 for anything that isn't Approved.
-        var isStaff = User.IsInRole(nameof(UserRole.Moderator)) || User.IsInRole(nameof(UserRole.Admin));
-        if (c.Status != CrackmeStatus.Approved && !isStaff)
-            return NotFound();
-
+        // Moderators/admins — and the uploader themselves — can open a not-yet-approved (pending/rejected)
+        // crackme to preview the full page; the public still gets 404 for anything that isn't Approved.
         var uid = CurrentUserId();
+        var isStaff = User.IsInRole(nameof(UserRole.Moderator)) || User.IsInRole(nameof(UserRole.Admin));
+        var isOwner = uid is not null && uid == c.UploaderUserId;
+        if (c.Status != CrackmeStatus.Approved && !isStaff && !isOwner)
+            return NotFound();
         var raw = await db.Reactions.AsNoTracking()
             .Where(r => r.TargetType == ModeratableType.Crackme && r.TargetId == c.Id)
             .Select(r => new ReactionRow(r.Emoji, r.UserId)).ToListAsync(ct);
@@ -124,7 +124,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             ? await db.Users.AsNoTracking().Where(u => u.Id == up).Select(u => u.Handle).FirstOrDefaultAsync(ct)
             : null;
 
-        return Ok(ToDetail(c, isOwner: uid is not null && uid == c.UploaderUserId, counts, mine, solvedByMe, authorHandle));
+        return Ok(ToDetail(c, isOwner: isOwner, counts, mine, solvedByMe, authorHandle));
     }
 
     // Public takedown/restore trail for a crackme — visible to everyone so removals/restores are transparent.
@@ -302,8 +302,16 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
 
-        var c = await db.Crackmes.AsNoTracking().Where(Public).FirstOrDefaultAsync(x => x.Slug == slug, ct);
+        // Owner + staff can pull their own not-yet-public crackme so the submission preview's download works;
+        // the public only gets an Approved, not-taken-down file. Preview pulls don't bump the download count.
+        var c = await db.Crackmes.AsNoTracking().FirstOrDefaultAsync(x => x.Slug == slug, ct);
         if (c is null)
+            return NotFound();
+        var uid = CurrentUserId();
+        var isStaff = User.IsInRole(nameof(UserRole.Moderator)) || User.IsInRole(nameof(UserRole.Admin));
+        var isPublic = c.Status == CrackmeStatus.Approved && !c.IsTakenDown;
+        var canPreview = !c.IsTakenDown && (isStaff || (uid is not null && uid == c.UploaderUserId));
+        if (!isPublic && !canPreview)
             return NotFound();
 
         var stream = await storage.OpenReadAsync(c.StorageKey, ct);
@@ -318,8 +326,9 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             zip = PasswordZip.Create(c.OriginalFileName ?? $"{c.Slug}.bin", ms.ToArray(), cfg["Crackmes:ZipPassword"] ?? "bitmono.dev");
         }
 
-        await db.Crackmes.Where(x => x.Id == c.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.DownloadCount, x => x.DownloadCount + 1), ct);
+        if (isPublic)   // don't inflate the public counter with owner/staff preview pulls
+            await db.Crackmes.Where(x => x.Id == c.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.DownloadCount, x => x.DownloadCount + 1), ct);
 
         return File(zip, "application/zip", $"{c.Slug}.zip");
     }

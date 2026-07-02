@@ -40,14 +40,17 @@ export default function Submissions() {
           <div key={s.slug} className="rounded-xl border border-line bg-surface/30 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                {s.status === 'approved'
-                  ? <Link to={`/challenge/${s.slug}`} className="font-display text-lg font-bold text-ink transition-colors hover:text-acid">{s.title}</Link>
-                  : <h2 className="font-display text-lg font-bold text-ink">{s.title}</h2>}
+                <Link to={`/challenge/${s.slug}`} className="font-display text-lg font-bold text-ink transition-colors hover:text-acid">{s.title}</Link>
                 <p className="mt-1 font-mono text-[12px] text-faint">
                   submitted {formatDate(s.createdAt)}{s.publishedAt && ` · published ${formatDate(s.publishedAt)}`}
                 </p>
               </div>
-              <span className={statusBadgeClass(s.status)}>{statusLabel(s.status)}</span>
+              <div className="flex flex-col items-end gap-2">
+                <span className={statusBadgeClass(s.status)}>{statusLabel(s.status)}</span>
+                <Link to={`/challenge/${s.slug}`} className="font-mono text-[12px] text-acid transition-colors hover:underline">
+                  {s.status === 'approved' ? 'open ↗' : 'preview ↗'}
+                </Link>
+              </div>
             </div>
 
             {s.status === 'pending' && (

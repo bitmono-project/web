@@ -6,13 +6,13 @@ import {
   getCrackme, getComments, postComment, editComment, deleteComment, getCommentHistory, hideComment, setCommentsLock, getMyRating, rateCrackme,
   getWriteups, submitWriteup, writeupAttachmentUrl, writeupImageUrl, toggleWriteupUpvote, toggleWriteupHelped, pinWriteup, editWriteup, deleteWriteup,
   REACTIONS, toggleCrackmeReaction, toggleCommentReaction, updateCrackmeSettings,
-  REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme,
+  REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme, approveCrackme, rejectCrackme,
   type ModerationEvent, getModerationHistory,
   markSolved, unmarkSolved, submitFlag, setVerification, VERIFICATION_KINDS,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate, statusLabel,
 } from '../lib/crackmes'
 import { type Me, isAdmin, isModerator, useAuth } from '../lib/auth'
-import { PromptDialog, ConfirmDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS } from '../components/PromptDialog'
+import { PromptDialog, ConfirmDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS, REJECT_PRESETS } from '../components/PromptDialog'
 import { ImageGallery } from '../components/ImageGallery'
 import { Turnstile } from '../components/Turnstile'
 import { Tooltip } from '../components/Tooltip'
@@ -63,6 +63,8 @@ export default function CrackmeDetail() {
           Preview — this submission is <span className="font-bold">{statusLabel(c.status)}</span> and isn’t public yet.
         </div>
       )}
+
+      {isModerator(me) && c.status === 'pending' && <ModeratePanel c={c} onChange={reload} />}
 
       <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -238,6 +240,69 @@ function ModEvent({ e }: { e: ModerationEvent }) {
       </div>
       {e.reason && <p className="mt-1 font-mono text-[13px] leading-relaxed text-ink/80">“{e.reason}”</p>}
     </li>
+  )
+}
+
+// Moderator/admin review controls on a pending submission's own page — approve to publish it, or reject
+// with a reason the author sees, without going back to the moderation queue.
+function ModeratePanel({ c, onChange }: { c: Detail; onChange: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [confirmApprove, setConfirmApprove] = useState(false)
+  const [rejecting, setRejecting] = useState(false)
+
+  const approve = async () => {
+    setConfirmApprove(false)
+    setBusy(true)
+    const ok = await approveCrackme(c.id)
+    setBusy(false)
+    if (ok) onChange()
+  }
+  const reject = async (reason: string) => {
+    setRejecting(false)
+    setBusy(true)
+    const ok = await rejectCrackme(c.id, reason)
+    setBusy(false)
+    if (ok) onChange()
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-dashed border-yellow-400/40 bg-yellow-400/5 p-4">
+      <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-yellow-400/80">Review this submission</div>
+      <p className="mb-3 font-mono text-[12px] text-muted">
+        Approve to publish it to the gallery now, or reject it with a reason the author sees on their submissions page.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => setConfirmApprove(true)} disabled={busy}
+          className="rounded-full border border-acid/50 px-4 py-2 font-mono text-sm text-acid transition-colors hover:bg-acid/10 disabled:opacity-50">
+          {busy ? '…' : '✓ approve & publish'}
+        </button>
+        <button onClick={() => setRejecting(true)} disabled={busy}
+          className="rounded-full border border-red-400/50 px-4 py-2 font-mono text-sm text-red-400 transition-colors hover:bg-red-400/10 disabled:opacity-50">
+          ✕ reject
+        </button>
+      </div>
+      {confirmApprove && (
+        <ConfirmDialog
+          title="Approve submission"
+          message="This publishes the crackme to the public gallery right now."
+          confirmText="approve"
+          onConfirm={approve}
+          onCancel={() => setConfirmApprove(false)}
+        />
+      )}
+      {rejecting && (
+        <PromptDialog
+          title="Reject submission"
+          label="Tell the author why — they’ll see this on their submissions page."
+          placeholder="pick a reason above, or write your own"
+          confirmText="reject"
+          danger
+          presets={REJECT_PRESETS}
+          onConfirm={reject}
+          onCancel={() => setRejecting(false)}
+        />
+      )}
+    </div>
   )
 }
 
