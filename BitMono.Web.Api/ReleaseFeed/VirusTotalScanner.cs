@@ -22,7 +22,7 @@ public sealed class VirusTotalScanner(
     IConfiguration cfg,
     ILogger<VirusTotalScanner> logger)
 {
-    private const int BatchPerRun = 2;                          // GET + POST per new asset ≈ the free 4/min cap
+    private const int BatchPerRun = 1;                          // gentle: free tier is only 500 req/day total
     private const long MaxUploadBytes = 32L * 1024 * 1024;      // VT standard POST /files limit
     private static readonly TimeSpan Refresh = TimeSpan.FromDays(7);   // re-pull "done" verdicts weekly
 

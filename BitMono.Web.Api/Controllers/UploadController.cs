@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
+using BitMono.Web.Api.Obfuscation;
 using BitMono.Web.Api.Security;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Api.Verification;
@@ -20,6 +21,8 @@ namespace BitMono.Web.Api.Controllers;
 public sealed class UploadController(
     IServiceScopeFactory scopeFactory,
     BlobStorage storage,
+    FileStore store,
+    IObfuscationService obfuscator,
     IMalwareScanner scanner,
     TurnstileVerifier turnstile,
     IConfiguration cfg,
@@ -64,28 +67,10 @@ public sealed class UploadController(
         var key = $"uploads/{id:N}/{SanitizeFileName(file.FileName)}";
         await storage.SaveAsync(key, new MemoryStream(bytes, writable: false), ct);
 
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
-        var handle = User.Identity?.Name ?? AppConstants.AnonymousHandle;
-        var ip = HttpContext.GetClientIp();
-        var now = DateTime.UtcNow;
-
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
-
-        var terms = new TermsAcceptance
-        {
-            Id = Guid.NewGuid(),
-            UserId = uid,
-            TermsVersion = cfg["Crackmes:TermsVersion"] ?? "2026-06",
-            AcceptedAt = now,
-            Ip = ip,
-            UserAgent = Truncate(Request.Headers.UserAgent.ToString(), 512),
-        };
-
         var crackme = new Crackme
         {
             Id = id,
-            Slug = await UniqueSlugAsync(db, Slug.From(form.Title), ct),
+            Slug = Slug.From(form.Title),
             Title = form.Title.Trim(),
             Description = form.Description,
             AuthorDifficulty = form.Difficulty,
@@ -104,14 +89,110 @@ public sealed class UploadController(
             OriginalFileName = SanitizeFileName(file.FileName),
             ContentType = file.ContentType,
             Status = CrackmeStatus.Pending,
-            UploaderUserId = uid,
-            AnonymousHandle = handle,
-            UploaderIp = ip,
-            TermsAcceptance = terms,
-            TermsAcceptanceId = terms.Id,
-            CreatedAt = now,
-            UpdatedAt = now,
         };
+
+        return await FinishSubmitAsync(crackme, form, ct);
+    }
+
+    // Publish a finished server-side obfuscation as a crackme — the obfuscate→publish bridge. The binary is
+    // the obfuscation OUTPUT that ObfuscateJob already produced and left in FileStore; we promote it to
+    // permanent storage and stamp the engine's BitMono version. No file is uploaded here (unlike Submit).
+    [HttpPost("from-obfuscation/{id:guid}")]
+    [EnableRateLimiting("upload")]
+    public async Task<IActionResult> SubmitFromObfuscation(Guid id, [FromForm] UploadForm form, CancellationToken ct)
+    {
+        var captchaToken = Request.Form[TurnstileVerifier.FormField].ToString();
+        if (!await turnstile.VerifyAsync(captchaToken, HttpContext.GetClientIp(), ct))
+            return BadRequest("Captcha check failed — please try again.");
+
+        if (string.IsNullOrWhiteSpace(form.Title))
+            return BadRequest("A title is required.");
+        if (!(form.AcceptOriginal && form.AcceptLegal && form.AcceptVm))
+            return BadRequest("You must accept all three terms to submit.");
+
+        // The output lives on the node that ran the job (local FileStore) until downloaded or swept, so
+        // publish must follow obfuscation reasonably promptly.
+        var output = await store.TryReadOutputAsync(id, ct);
+        if (output is null)
+            return NotFound("That obfuscation isn't ready or has expired — obfuscate again, then publish.");
+
+        var fileName = SanitizeFileName(!string.IsNullOrWhiteSpace(form.FileName) ? form.FileName! : $"{id:N}.dll");
+        var sha = Convert.ToHexString(SHA256.HashData(output)).ToLowerInvariant();
+
+        var crackmeId = Guid.NewGuid();
+        var key = $"uploads/{crackmeId:N}/{fileName}";
+        await storage.SaveAsync(key, new MemoryStream(output, writable: false), ct);
+
+        // Stamp the engine's version (display string + packed for the matrix). Never fail a publish because
+        // /version hiccuped — the challenge is valid without provenance; it just won't join the matrix.
+        string? version = null;
+        uint? packed = null;
+        try
+        {
+            var v = await obfuscator.GetVersionAsync(ct);
+            version = v.BitMono;
+            packed = v.Packed;
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "Could not read BitMono version while publishing crackme {Id}", crackmeId);
+        }
+
+        var crackme = new Crackme
+        {
+            Id = crackmeId,
+            Slug = Slug.From(form.Title),
+            Title = form.Title.Trim(),
+            Description = form.Description,
+            AuthorDifficulty = form.Difficulty,
+            TargetPlatform = form.Platform,
+            DotnetRuntime = form.Runtime,
+            Language = form.Language,
+            Preset = form.Preset,
+            IsBitMonoObfuscated = true,      // the site obfuscated it — authoritative, not author-stated
+            ReactionsEnabled = form.ReactionsEnabled,
+            CommentReactionsEnabled = form.CommentReactionsEnabled,
+            ProtectionsApplied = form.Protections.Where(p => !string.IsNullOrWhiteSpace(p))
+                .Select(p => new AppliedProtection { Name = p.Trim() }).ToList(),
+            BitMonoVersion = version,
+            BitMonoVersionPacked = packed,
+            StorageKey = key,
+            Sha256 = sha,
+            SizeBytes = output.LongLength,
+            OriginalFileName = fileName,
+            ContentType = "application/octet-stream",
+            Status = CrackmeStatus.Pending,
+        };
+
+        var result = await FinishSubmitAsync(crackme, form, ct);
+        if (result is AcceptedResult)   // published — the scratch output is now redundant
+            store.DeleteOutput(id);
+        return result;
+    }
+
+    // Shared tail for both submit paths: stamp the uploader, attach a terms record, apply optional
+    // verification, ensure a unique slug, and persist. Caller sets a base Slug; this makes it unique.
+    private async Task<IActionResult> FinishSubmitAsync(Crackme crackme, UploadForm form, CancellationToken ct)
+    {
+        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var now = DateTime.UtcNow;
+        crackme.UploaderUserId = uid;
+        crackme.AnonymousHandle = User.Identity?.Name ?? AppConstants.AnonymousHandle;
+        crackme.UploaderIp = HttpContext.GetClientIp();
+        crackme.CreatedAt = now;
+        crackme.UpdatedAt = now;
+
+        var terms = new TermsAcceptance
+        {
+            Id = Guid.NewGuid(),
+            UserId = uid,
+            TermsVersion = cfg["Crackmes:TermsVersion"] ?? "2026-06",
+            AcceptedAt = now,
+            Ip = crackme.UploaderIp,
+            UserAgent = Truncate(Request.Headers.UserAgent.ToString(), 512),
+        };
+        crackme.TermsAcceptance = terms;
+        crackme.TermsAcceptanceId = terms.Id;
 
         // Optional solve verification, set right at creation (the author can still change it later).
         if (form.VerificationKind != VerificationKind.None)
@@ -121,6 +202,9 @@ public sealed class UploadController(
                 return BadRequest(verr);
         }
 
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        crackme.Slug = await UniqueSlugAsync(db, crackme.Slug, ct);
         db.TermsAcceptances.Add(terms);
         db.Crackmes.Add(crackme);
         await db.SaveChangesAsync(ct);

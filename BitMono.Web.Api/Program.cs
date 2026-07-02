@@ -144,8 +144,9 @@ app.MapControllers();
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     RecurringJob.AddOrUpdate<CleanupJob>("cleanup", j => j.RunAsync(CancellationToken.None), Cron.Hourly);
-    // Work through the release's assets a few at a time (free VT API = 4 lookups/min). No-ops without a key.
-    RecurringJob.AddOrUpdate<VirusTotalScanner>("vtscan", s => s.RunAsync(CancellationToken.None), "*/2 * * * *");
+    // Work through the release's assets slowly — the free VT tier is only 500 req/day, so one asset every
+    // 10 min (~150 req/day) stays well within it. No-ops without a key.
+    RecurringJob.AddOrUpdate<VirusTotalScanner>("vtscan", s => s.RunAsync(CancellationToken.None), "*/10 * * * *");
 });
 
 app.Run();

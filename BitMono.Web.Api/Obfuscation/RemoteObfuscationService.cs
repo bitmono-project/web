@@ -1,4 +1,6 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using BitMono.Web.Api.Models;
 
 namespace BitMono.Web.Api.Obfuscation;
 
@@ -42,5 +44,12 @@ public sealed class RemoteObfuscationService(IHttpClientFactory factory) : IObfu
         using var response = await http.PostAsync("/obfuscate", form, ct);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsByteArrayAsync(ct);
+    }
+
+    public async Task<VersionResponse> GetVersionAsync(CancellationToken ct)
+    {
+        var http = factory.CreateClient("obfuscation");
+        return await http.GetFromJsonAsync<VersionResponse>("/version", ct)
+            ?? throw new InvalidOperationException("Obfuscation service returned no version.");
     }
 }

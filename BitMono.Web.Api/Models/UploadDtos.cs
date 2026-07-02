@@ -7,6 +7,9 @@ namespace BitMono.Web.Api.Models;
 public sealed class UploadForm
 {
     public IFormFile? File { get; set; }
+    // Only the from-obfuscation publish path uses this: the binary comes from the finished obfuscation,
+    // so there's no IFormFile — this carries the original assembly name for the stored file. Ignored elsewhere.
+    public string? FileName { get; set; }
     public string Title { get; set; } = "";
     public string? Description { get; set; }
     public TargetPlatform Platform { get; set; }
