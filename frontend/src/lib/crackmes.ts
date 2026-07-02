@@ -19,6 +19,7 @@ export interface CrackmeListItem {
   solutionCount: number
   commentCount: number
   isBitMonoObfuscated: boolean
+  bitMonoVersion: string | null
   protections: string[]
   publishedAt: string
   authorHandle: string | null
@@ -50,6 +51,7 @@ export interface CrackmeDetail {
   downloadCount: number
   solvedCount: number
   isBitMonoObfuscated: boolean
+  bitMonoVersion: string | null
   preset: string
   protections: string[]
   publishedAt: string

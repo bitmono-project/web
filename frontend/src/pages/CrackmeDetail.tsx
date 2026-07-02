@@ -96,7 +96,7 @@ export default function CrackmeDetail() {
 
       <div className="mt-6">
         <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">
-          Protections {c.isBitMonoObfuscated && <span className="ml-1 text-acid">· BitMono {c.preset}</span>}
+          Protections {c.isBitMonoObfuscated && <span className="ml-1 text-acid">· BitMono {c.preset}{c.bitMonoVersion && ` · v${c.bitMonoVersion}`}</span>}
         </div>
         <div className="flex flex-wrap gap-2">
           {c.protections.length === 0

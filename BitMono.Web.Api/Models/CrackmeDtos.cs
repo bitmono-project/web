@@ -33,6 +33,7 @@ public sealed record CrackmeListItem(
     int SolutionCount,
     int CommentCount,
     bool IsBitMonoObfuscated,
+    string? BitMonoVersion,
     IReadOnlyList<string> Protections,
     DateTime PublishedAt,
     string? AuthorHandle);
@@ -62,6 +63,7 @@ public sealed record CrackmeDetail(
     long DownloadCount,
     int SolvedCount,
     bool IsBitMonoObfuscated,
+    string? BitMonoVersion,
     ObfuscationPreset Preset,
     IReadOnlyList<string> Protections,
     DateTime PublishedAt,

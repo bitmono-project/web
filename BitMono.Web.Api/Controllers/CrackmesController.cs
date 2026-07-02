@@ -938,7 +938,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.TargetPlatform, c.DotnetRuntime, c.Language,
         c.AuthorDifficulty, Avg(c.DifficultySum, c.DifficultyCount), Avg(c.QualitySum, c.QualityCount),
         c.SizeBytes, c.DownloadCount, c.SolvedCount, solutions, comments,
-        c.IsBitMonoObfuscated, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt, authorHandle);
+        c.IsBitMonoObfuscated, c.BitMonoVersion, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt, authorHandle);
 
     private static CrackmeDetail ToDetail(Crackme c, bool isOwner, IReadOnlyDictionary<string, int> reactions, IReadOnlyList<string> myReactions, bool solvedByMe, string? authorHandle) => new(
         c.Id, c.Slug, c.Title, c.Description, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
@@ -946,7 +946,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.AuthorDifficulty, Avg(c.DifficultySum, c.DifficultyCount), c.DifficultyCount,
         Avg(c.QualitySum, c.QualityCount), c.QualityCount,
         c.SizeBytes, c.OriginalFileName, c.DownloadCount, c.SolvedCount,
-        c.IsBitMonoObfuscated, c.Preset, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt,
+        c.IsBitMonoObfuscated, c.BitMonoVersion, c.Preset, EnabledProtections(c), c.PublishedAt ?? c.CreatedAt,
         isOwner, c.ReactionsEnabled, c.CommentReactionsEnabled, c.CommentsLocked, reactions, myReactions,
         c.Status, c.TakedownReason, c.TakenDownAt, solvedByMe, authorHandle, c.VerificationKind);
 
@@ -958,7 +958,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.AuthorDifficulty, AvgDifficulty: null, DifficultyCount: 0,
         AvgQuality: null, QualityCount: 0,
         SizeBytes: 0, OriginalFileName: null, DownloadCount: c.DownloadCount, SolvedCount: c.SolvedCount,
-        IsBitMonoObfuscated: false, Preset: ObfuscationPreset.Custom, Protections: [],
+        IsBitMonoObfuscated: false, BitMonoVersion: null, Preset: ObfuscationPreset.Custom, Protections: [],
         PublishedAt: c.PublishedAt ?? c.CreatedAt, IsOwner: false,
         ReactionsEnabled: false, CommentReactionsEnabled: false, CommentsLocked: false,
         Reactions: new Dictionary<string, int>(), MyReactions: [],

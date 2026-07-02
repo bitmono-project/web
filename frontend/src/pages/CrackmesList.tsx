@@ -101,6 +101,7 @@ function Row({ c }: { c: CrackmeListItem }) {
     <tr className="relative cursor-pointer border-b border-line/60 transition-colors hover:bg-surface/50">
       <Td>
         <Link to={`/challenge/${c.slug}`} className="text-ink transition-colors after:absolute after:inset-0 hover:text-acid">{c.title}</Link>
+        {c.bitMonoVersion && <div className="mt-0.5 text-[10px] text-faint">BitMono v{c.bitMonoVersion}</div>}
       </Td>
       <Td className="text-muted">
         {c.authorHandle
