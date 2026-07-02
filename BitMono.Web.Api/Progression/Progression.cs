@@ -2,6 +2,7 @@ using BitMono.Web.Api.Badges;
 using BitMono.Web.Api.Notifications;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 
 namespace BitMono.Web.Api.Progression;
@@ -132,6 +133,9 @@ public static class SolveRecorder
                 await BadgeService.TryAwardAsync(db, userId, BadgeService.Bitmonoed, ct);
         }
         catch { }
+
+        // Announce to Discord off the request path — Hangfire owns retries; never breaks the solve.
+        try { BackgroundJob.Enqueue<DiscordWebhook>(d => d.SolvedAsync(solve.Id, CancellationToken.None)); } catch { }
         return solve;
     }
 

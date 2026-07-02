@@ -2,6 +2,7 @@ using BitMono.Web.Api.Hangfire;
 using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Jobs;
 using BitMono.Web.Api.Auth;
+using BitMono.Web.Api.Notifications;
 using BitMono.Web.Api.Obfuscation;
 using BitMono.Web.Api.ReleaseFeed;
 using BitMono.Web.Api.Security;
@@ -100,6 +101,11 @@ builder.Services.AddHttpClient("virustotal", client =>
 #pragma warning restore EXTEXP0001
 builder.Services.AddSingleton<ReleaseCatalog>();
 builder.Services.AddScoped<VirusTotalScanner>();
+
+// Discord channel announcements (new challenge / solve). Keeps the default resilience handler —
+// it retries 429s/5xx, which is exactly what a webhook post wants.
+builder.Services.AddHttpClient("discord", client => client.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddScoped<DiscordWebhook>();
 
 builder.Services.AddRateLimiter(options =>
 {

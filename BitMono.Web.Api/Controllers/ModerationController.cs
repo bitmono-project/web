@@ -7,6 +7,7 @@ using BitMono.Web.Api.Progression;
 using BitMono.Web.Api.Storage;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
+using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -430,6 +431,7 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             return NotFound();
 
         var now = DateTime.UtcNow;
+        var firstPublish = approve && c.PublishedAt is null;
         if (approve)
         {
             c.Status = CrackmeStatus.Approved;
@@ -469,6 +471,10 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
                     $"'{c.Title}' wasn't approved", message, "/submissions", actor, c.Id, ct);
         }
         catch { /* a notify must never break the moderation action */ }
+
+        // Announce first-time publishes (not re-approvals) to Discord off the request path.
+        if (firstPublish)
+            try { BackgroundJob.Enqueue<DiscordWebhook>(d => d.ChallengePublishedAsync(c.Id, CancellationToken.None)); } catch { }
 
         if (approve && c.UploaderUserId is { } author)
         {

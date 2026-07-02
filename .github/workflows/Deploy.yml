@@ -17,6 +17,7 @@ permissions:
 #   GH_OAUTH_CLIENT_ID, GH_OAUTH_CLIENT_SECRET (GitHub OAuth login; GH_ prefix — GITHUB_* is reserved)
 #   TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY   (Cloudflare Turnstile captcha on upload)
 #   CRACKME_ZIP_PASSWORD                        (download zip password; defaults to bitmono.dev)
+#   DISCORD_WEBHOOK_URL                         (channel webhook — announces new challenges + solves)
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -76,3 +77,5 @@ jobs:
           Parameters__VirusTotalApiKey: ${{ secrets.VIRUSTOTAL_API_KEY }}
           # GitHub API token — raises the release-feed rate limit from 60/hr (shared IP) to 5,000/hr
           Parameters__GitHubApiToken: ${{ secrets.GH_API_TOKEN }}
+          # Discord channel webhook — announces new challenges + solves (unset = disabled)
+          Parameters__DiscordWebhookUrl: ${{ secrets.DISCORD_WEBHOOK_URL }}
