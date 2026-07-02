@@ -1,5 +1,5 @@
 using System.Net;
-using System.Text.Json;
+using System.Net.Http.Json;
 using BitMono.Web.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -77,7 +77,10 @@ public sealed class VirusTotalScanner(
 
             if (res.IsSuccessStatusCode)
             {
-                var (flagged, total) = ParseStats(await res.Content.ReadAsStringAsync(ct));
+                var parsed = await res.Content.ReadFromJsonAsync<VtFileResponse>(ct);
+                var stats = parsed?.data.attributes.last_analysis_stats ?? new Dictionary<string, int>();
+                var flagged = stats.GetValueOrDefault("malicious") + stats.GetValueOrDefault("suspicious");
+                var total = stats.Values.Sum();
                 // total == 0 → VT knows the file but analysis is still queued; stay pending, re-check later.
                 await UpsertAsync(sha, total > 0 ? "done" : "pending", flagged, total, ct);
                 return true;
@@ -113,17 +116,6 @@ public sealed class VirusTotalScanner(
         return true;
     }
 
-    private static (int flagged, int total) ParseStats(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        var stats = doc.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("last_analysis_stats");
-        var flagged = stats.GetProperty("malicious").GetInt32() + stats.GetProperty("suspicious").GetInt32();
-        var total = 0;
-        foreach (var p in stats.EnumerateObject())
-            total += p.Value.GetInt32();
-        return (flagged, total);
-    }
-
     private async Task UpsertAsync(string sha, string status, int flagged, int total, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
@@ -134,4 +126,10 @@ public sealed class VirusTotalScanner(
                 "Status" = {status}, "Flagged" = {flagged}, "Total" = {total}, "UpdatedAt" = {now}
             """, ct);
     }
+
+    // Typed shape of the slice of the VirusTotal /files/{id} response we read (snake_case matches the API;
+    // web defaults are case-insensitive). last_analysis_stats maps each engine outcome → its count.
+    private sealed record VtFileResponse(VtData data);
+    private sealed record VtData(VtAttributes attributes);
+    private sealed record VtAttributes(Dictionary<string, int> last_analysis_stats);
 }
