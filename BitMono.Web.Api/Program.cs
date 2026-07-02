@@ -11,6 +11,7 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -70,13 +71,33 @@ builder.Services.AddHttpClient("obfuscation", client =>
 #pragma warning restore EXTEXP0001
 builder.Services.AddScoped<IObfuscationService, RemoteObfuscationService>();
 
-// Release download chooser + VirusTotal scanning. GitHub and VirusTotal are external third-party APIs, so
-// they get plain HttpClients (GitHubHttp / VirusTotalHttp) instead of IHttpClientFactory — Aspire's default
-// pipeline (service discovery for internal resources + standard resilience) fails these external calls in the
-// deployed container. VirusTotal is gated on VirusTotal:ApiKey (deploy secret); no key → the scan job no-ops.
+// Release download chooser + VirusTotal scanning, both hitting external third-party APIs. The standard
+// resilience handler is removed (like the obfuscation client) so large release assets (~34 MB) can stream
+// through /download without its 30s total timeout, and so VirusTotal retries don't burn the 4/min quota.
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<GitHubHttp>();
-builder.Services.AddSingleton<VirusTotalHttp>();
+#pragma warning disable EXTEXP0001
+builder.Services.AddHttpClient("github", client =>
+{
+    client.BaseAddress = new Uri("https://api.github.com/");
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BitMono-Web");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+    // Unauthenticated GitHub API is 60 req/hr per IP — exhausted on a shared datacenter IP (prod hit a 403
+    // "rate limit exceeded"). A token (even scopeless, for public data) raises it to 5,000/hr.
+    var token = builder.Configuration["GitHub:ApiToken"];
+    if (!string.IsNullOrWhiteSpace(token))
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+    client.Timeout = TimeSpan.FromMinutes(5);
+}).RemoveAllResilienceHandlers();
+
+var virusTotalKey = builder.Configuration["VirusTotal:ApiKey"];
+builder.Services.AddHttpClient("virustotal", client =>
+{
+    client.BaseAddress = new Uri("https://www.virustotal.com/api/v3/");
+    if (!string.IsNullOrWhiteSpace(virusTotalKey))
+        client.DefaultRequestHeaders.Add("x-apikey", virusTotalKey);
+    client.Timeout = TimeSpan.FromSeconds(30);
+}).RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
 builder.Services.AddSingleton<ReleaseCatalog>();
 builder.Services.AddScoped<VirusTotalScanner>();
 

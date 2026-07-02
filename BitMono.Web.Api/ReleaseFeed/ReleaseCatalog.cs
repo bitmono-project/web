@@ -19,7 +19,7 @@ public sealed record ReleaseCatalogData(
 // failure (rate-limit, outage) we serve the last good catalog so the download page never goes dark.
 // ponytail: per-replica IMemoryCache — a couple of replicas means a couple of GitHub calls/hr, still far
 // under the limit. Move to a distributed cache only if replica count ever balloons.
-public sealed class ReleaseCatalog(GitHubHttp github, IMemoryCache cache, ILogger<ReleaseCatalog> logger)
+public sealed class ReleaseCatalog(IHttpClientFactory factory, IMemoryCache cache, ILogger<ReleaseCatalog> logger)
 {
     private const string Repo = "bitmono-project/BitMono";
     private const string CacheKey = "release:latest";
@@ -71,7 +71,7 @@ public sealed class ReleaseCatalog(GitHubHttp github, IMemoryCache cache, ILogge
     {
         try
         {
-            var gh = await github.Client.GetFromJsonAsync<GhRelease>($"repos/{Repo}/releases/latest", ct);
+            var gh = await factory.CreateClient("github").GetFromJsonAsync<GhRelease>($"repos/{Repo}/releases/latest", ct);
             if (gh is null)
                 return null;
 
