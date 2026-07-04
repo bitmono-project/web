@@ -6,6 +6,7 @@ const posts = allPosts()
 assert.ok(posts.length >= 1, 'at least one post')
 for (const p of posts) {
   assert.ok(p.slug && p.title && p.description && p.author, `frontmatter complete: ${p.slug}`)
+  assert.match(p.slug, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, `slug is kebab-case (URL-safe): ${p.slug}`)
   assert.match(p.date, /^\d{4}-\d{2}-\d{2}$/, `date is YYYY-MM-DD: ${p.slug}`)
   assert.ok(p.description.length <= 160, `description fits a SERP snippet (<=160): ${p.slug}`)
   assert.match(p.html, /<h2 id="/, `headings carry deep-link ids: ${p.slug}`)

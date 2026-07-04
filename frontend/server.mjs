@@ -91,11 +91,25 @@ app.use(express.static(distDir, { index: false }));
 // Twitter and JSON-LD injected before </head>. Crawlers (Google's first wave, Telegram, X, Discord,
 // AI bots) don't run JS, so all SEO-critical head tags must be server-rendered here.
 app.use(async (req, res) => {
-  const origin = originOf(req);
-  const head = await headFor(req, { apiUrl, origin });
-  res.status(head.status ?? 200)
-    .set('Content-Type', 'text/html; charset=utf-8')
-    .send(injectHead(template, head, { gscToken, rssUrl: `${origin}/blog/rss.xml` }));
+  try {
+    const origin = originOf(req);
+    const head = await headFor(req, { apiUrl, origin });
+    res.status(head.status ?? 200)
+      .set('Content-Type', 'text/html; charset=utf-8')
+      .send(injectHead(template, head, { gscToken, rssUrl: `${origin}/blog/rss.xml` }));
+  } catch {
+    // headFor throws only on a malformed URL (decodeURIComponent on a bad %-escape). Without this
+    // the rejection is unhandled and Node exits — one crawler hitting /blog/%zz would down the site.
+    res.status(400).set('Content-Type', 'text/plain; charset=utf-8').send('Bad Request');
+  }
+});
+
+// Final safety net for errors thrown deeper in the stack (e.g. serve-static decoding a bad %-escape),
+// so no request can crash the process. Must keep all four args for Express to treat it as an error handler.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) return res.end();
+  res.status(400).set('Content-Type', 'text/plain; charset=utf-8').send('Bad Request');
 });
 
 app.listen(port, '0.0.0.0');

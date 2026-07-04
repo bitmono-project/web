@@ -43,12 +43,18 @@ const posts = readdirSync(dir)
   .filter((f) => f.endsWith('.md'))
   .map((file) => {
     const { meta, body } = parseFrontmatter(readFileSync(path.join(dir, file), 'utf8'))
+    const slug = file.replace(/\.md$/, '')
+    // Fail the deploy (not prod runtime — content is baked into the image) on a bad post: a non-kebab
+    // slug breaks the raw URL interpolation in JSON-LD/sitemap; a non-ISO date breaks datePublished and
+    // renders "Invalid Date". The smoke check catches both before this ever ships.
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error(`blog: slug must be kebab-case [a-z0-9-]: "${slug}"`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.date ?? '')) throw new Error(`blog: ${slug} needs frontmatter date: YYYY-MM-DD (got "${meta.date ?? ''}")`)
     const words = body.split(/\s+/).filter(Boolean).length
     return {
-      slug: file.replace(/\.md$/, ''),
+      slug,
       title: meta.title ?? file,
       description: meta.description ?? '',
-      date: meta.date ?? '1970-01-01',
+      date: meta.date,
       updated: meta.updated ?? null,
       author: meta.author ?? 'BitMono',
       authorUrl: meta.authorUrl ?? null,

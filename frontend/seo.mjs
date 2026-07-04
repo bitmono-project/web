@@ -466,7 +466,10 @@ export async function headFor(req, { apiUrl, origin }) {
   // Normalize a trailing slash (except root) so "/crackmes/" canonicalizes to "/crackmes" and gets the
   // right title instead of falling through to the generic default.
   const p = req.path.length > 1 ? req.path.replace(/\/+$/, '') : '/'
-  const r = ROUTES[p] ?? { title: SITE.title, description: SITE.description }
+  // Anything reaching here that isn't root, a dynamic route (handled above) or a known static route is a
+  // real 404 — without this every unknown path (/Blog, /blog//x, /typo) was an indexable soft-404.
+  if (p !== '/' && !ROUTES[p]) return notFound(origin, req, 'Page not found — BitMono')
+  const r = ROUTES[p]
   let body = ''
   let jsonld = p === '/' ? [homeGraph(origin)] : []
   if (p === '/') body = homeBody()
