@@ -6,6 +6,7 @@ export const ar: Dict = {
     obfuscate: 'تشويش',
     crackmes: 'تحديات الكراك',
     leaderboard: 'المتصدّرون',
+    blog: 'المدونة',
     review: 'المراجعة',
     admin: 'الإدارة',
     docs: 'الوثائق',
@@ -15,6 +16,15 @@ export const ar: Dict = {
     logout: 'تسجيل الخروج',
     notifications: 'الإشعارات',
     language: 'اللغة',
+  },
+  blog: {
+    heading: 'المدونة',
+    tagline: 'ملاحظات من مشروع BitMono — تعتيم ‎.NET، والهندسة العكسية، وما يصدر في كل إصدار.',
+    minRead: 'قراءة {min} دقائق',
+    back: '→ كل المقالات',
+    by: 'بقلم',
+    updated: 'حُدِّث {date}',
+    notFound: 'لا توجد هذه المقالة.',
   },
   footer: {
     copy: '© bitmono — مشوّش مفتوح المصدر ومجاني لـ .NET و Mono · web {version}',

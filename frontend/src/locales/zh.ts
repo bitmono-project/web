@@ -5,6 +5,7 @@ export const zh: Dict = {
     obfuscate: '混淆',
     crackmes: '破解挑战',
     leaderboard: '排行榜',
+    blog: '博客',
     review: '审核',
     admin: '管理',
     docs: '文档',
@@ -14,6 +15,15 @@ export const zh: Dict = {
     logout: '退出',
     notifications: '通知',
     language: '语言',
+  },
+  blog: {
+    heading: '博客',
+    tagline: '来自 BitMono 项目的笔记 —— .NET 混淆、逆向工程，以及每次发布的幕后。',
+    minRead: '阅读约 {min} 分钟',
+    back: '← 全部文章',
+    by: '作者：',
+    updated: '更新于 {date}',
+    notFound: '没有这篇文章。',
   },
   footer: {
     copy: '© bitmono — 免费开源的 .NET 与 Mono 混淆器 · web {version}',

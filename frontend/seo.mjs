@@ -3,6 +3,8 @@
 // canonical, robots, Open Graph, Twitter, structured data — is injected into the initial HTML here, not
 // by React. The client only keeps the tab <title> in sync on navigation (see src/lib/useTitle.ts).
 
+import { allPosts, postBySlug } from './blog.mjs'
+
 const SITE = {
   name: 'BitMono',
   title: 'BitMono — obfuscate your .NET in the browser',
@@ -40,6 +42,10 @@ const ROUTES = {
   '/download': {
     title: 'Download BitMono — .NET & Unity obfuscator',
     description: 'Download BitMono, the free & open-source obfuscator for .NET and Unity. A guided picker resolves the exact CLI, Unity package or NuGet build for your runtime — always the latest release.',
+  },
+  '/blog': {
+    title: 'Blog — BitMono',
+    description: 'Notes from the BitMono project — .NET obfuscation techniques, reverse engineering, and how the free open-source obfuscator works under the hood.',
   },
   '/login': { title: 'Sign in — BitMono', description: SITE.description, noindex: true },
   '/upload': { title: 'Submit a crackme — BitMono', description: 'Share a .NET crackme with the BitMono gallery.', noindex: true },
@@ -178,6 +184,70 @@ function profileGraph(origin, p) {
   }
 }
 
+// Compact publisher node inlined into blog graphs so each page's JSON-LD is self-contained
+// (Google evaluates structured data per page — @id references to other pages don't resolve).
+const publisherNode = (origin) => ({
+  '@type': 'Organization', name: 'BitMono', url: `${origin}/`,
+  logo: { '@type': 'ImageObject', url: `${origin}/mark.png` },
+})
+
+function blogGraph(origin, posts) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Blog', '@id': `${origin}/blog#blog`, url: `${origin}/blog`,
+        name: 'BitMono Blog',
+        description: ROUTES['/blog'].description,
+        inLanguage: 'en',
+        publisher: publisherNode(origin),
+        blogPost: posts.map((p) => ({
+          '@type': 'BlogPosting',
+          headline: p.title,
+          url: `${origin}/blog/${p.slug}`,
+          datePublished: p.date,
+        })),
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: `${origin}/` },
+          { '@type': 'ListItem', position: 2, name: 'Blog' },
+        ],
+      },
+    ],
+  }
+}
+
+function blogPostGraph(origin, p) {
+  const url = `${origin}/blog/${p.slug}`
+  const posting = {
+    '@type': 'BlogPosting',
+    '@id': `${url}#post`,
+    headline: p.title,
+    description: p.description,
+    url,
+    mainEntityOfPage: url,
+    image: [`${origin}/og/blog/${p.slug}.png`],
+    datePublished: p.date,
+    dateModified: p.updated ?? p.date,
+    inLanguage: 'en',
+    wordCount: p.words,
+    isPartOf: { '@type': 'Blog', '@id': `${origin}/blog#blog`, name: 'BitMono Blog' },
+    author: { '@type': 'Person', name: p.author, ...(p.authorUrl ? { url: p.authorUrl } : {}) },
+    publisher: publisherNode(origin),
+  }
+  const breadcrumb = {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: `${origin}/` },
+      { '@type': 'ListItem', position: 2, name: 'Blog', item: `${origin}/blog` },
+      { '@type': 'ListItem', position: 3, name: p.title },
+    ],
+  }
+  return { '@context': 'https://schema.org', '@graph': [posting, breadcrumb] }
+}
+
 function descriptionFor(c) {
   if (c.description && c.description.trim()) return c.description.trim()
   const diff = c.avgDifficulty != null ? ` · difficulty ${c.avgDifficulty.toFixed(1)}/6` : ''
@@ -285,6 +355,37 @@ function downloadBody(origin, rel) {
 </main>`
 }
 
+const fmtDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })
+
+// Blog bodies mirror the client pages (src/pages/BlogList.tsx / BlogPost.tsx) — full article HTML in
+// the initial response, since AI crawlers and Google's first wave read it without running JS.
+function blogIndexBody(origin, posts) {
+  const items = posts.map((p) => `<a href="/blog/${p.slug}" class="group block py-7">
+    <p class="flex flex-wrap items-center gap-x-3 font-mono text-[11px] text-faint"><time datetime="${p.date}">${fmtDate(p.date)}</time><span>·</span><span>${p.minutes} min read</span></p>
+    <h2 class="mt-2 font-display text-2xl font-bold tracking-tight text-ink transition-colors group-hover:text-acid">${esc(p.title)}</h2>
+    <p class="mt-2 font-mono text-[13px] leading-relaxed text-muted">${esc(p.description)}</p>
+  </a>`).join('')
+  return `<main class="mx-auto max-w-3xl px-6 py-12">
+  <p class="font-mono text-[11px] uppercase tracking-[0.2em] text-acid">bitmono // blog</p>
+  <h1 class="mt-2 font-display text-4xl font-extrabold tracking-tight text-ink">Blog</h1>
+  <p class="mt-3 max-w-xl font-mono text-[13px] leading-relaxed text-muted">Notes from the BitMono project — .NET obfuscation, reverse engineering, and what ships.</p>
+  <div class="mt-8 divide-y divide-line border-t border-line">${items}</div>
+</main>`
+}
+
+function blogPostBody(origin, p) {
+  const author = p.authorUrl ? `<a href="${escAttr(p.authorUrl)}" rel="author" class="text-acid hover:underline">${esc(p.author)}</a>` : esc(p.author)
+  return `<main class="mx-auto max-w-3xl px-6 py-12">
+  <a href="/blog" class="font-mono text-xs text-faint hover:text-muted">← all posts</a>
+  <article class="mt-4">
+    <p class="flex flex-wrap items-center gap-x-3 font-mono text-[11px] text-faint"><time datetime="${p.date}">${fmtDate(p.date)}</time><span>·</span><span>${p.minutes} min read</span>${p.updated ? `<span>·</span><span>updated <time datetime="${p.updated}">${fmtDate(p.updated)}</time></span>` : ''}</p>
+    <h1 class="mt-3 font-display text-4xl font-extrabold leading-tight tracking-tight text-ink">${esc(p.title)}</h1>
+    <p class="mt-3 font-mono text-[13px] text-muted">by ${author}</p>
+    <div class="blog-prose mt-8">${p.html}</div>
+  </article>
+</main>`
+}
+
 // SoftwareApplication for the download page — free .NET/Unity obfuscator, versioned to the current release.
 function downloadGraph(origin, rel) {
   return {
@@ -327,6 +428,23 @@ export async function headFor(req, { apiUrl, origin }) {
     }
   }
 
+  m = req.path.match(/^\/blog\/([^/]+)\/?$/)
+  if (m) {
+    const post = postBySlug(decodeURIComponent(m[1]))
+    if (!post) return notFound(origin, req, 'Post not found — BitMono')
+    return {
+      title: `${post.title} — BitMono Blog`,
+      description: post.description,
+      canonical: `${origin}/blog/${post.slug}`,
+      image: `${origin}/og/blog/${post.slug}.png`,
+      ogType: 'article',
+      article: { published: post.date, modified: post.updated ?? post.date, author: post.author },
+      robots: null,
+      jsonld: [blogPostGraph(origin, post)],
+      body: blogPostBody(origin, post),
+    }
+  }
+
   m = req.path.match(/^\/user\/([^/]+)\/?$/)
   if (m) {
     const handle = decodeURIComponent(m[1])
@@ -359,6 +477,9 @@ export async function headFor(req, { apiUrl, origin }) {
     const rel = await fetchJson(`${apiUrl}/api/releases/latest`)
     body = downloadBody(origin, rel)
     if (rel) jsonld = [downloadGraph(origin, rel)]
+  } else if (p === '/blog') {
+    body = blogIndexBody(origin, allPosts())
+    jsonld = [blogGraph(origin, allPosts())]
   }
   return {
     title: r.title,
@@ -386,6 +507,12 @@ function socialTags(h) {
     ['og:type', h.ogType], ['og:site_name', SITE.name], ['og:title', h.title],
     ['og:description', h.description], ['og:url', h.canonical], ['og:image', h.image],
     ['og:image:width', '1200'], ['og:image:height', '630'], ['og:image:alt', h.title],
+    // og:type article carries its dates — unfurlers and search both read them.
+    ...(h.article ? [
+      ['article:published_time', h.article.published],
+      ['article:modified_time', h.article.modified],
+      ['article:author', h.article.author],
+    ] : []),
   ].map(([p, v]) => `<meta property="${p}" content="${escAttr(v)}"/>`)
   const tw = [
     ['twitter:card', 'summary_large_image'], ['twitter:title', h.title],
@@ -397,8 +524,9 @@ function socialTags(h) {
 // JSON.stringify doesn't escape "<", so neutralize it to keep a "</script>" in any field from breaking out.
 const jsonLd = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`
 
-export function injectHead(template, head, { gscToken } = {}) {
+export function injectHead(template, head, { gscToken, rssUrl } = {}) {
   const tags = [`<link rel="canonical" href="${escAttr(head.canonical)}"/>`]
+  if (rssUrl) tags.push(`<link rel="alternate" type="application/rss+xml" title="BitMono Blog" href="${escAttr(rssUrl)}"/>`)
   if (head.robots) tags.push(`<meta name="robots" content="${escAttr(head.robots)}"/>`)
   if (gscToken) tags.push(`<meta name="google-site-verification" content="${escAttr(gscToken)}"/>`)
   tags.push(...socialTags(head))
@@ -427,7 +555,9 @@ export async function buildSitemap(origin, { apiUrl }) {
     { loc: `${origin}/faq` },
     { loc: `${origin}/ranks` },
     { loc: `${origin}/download` },
+    { loc: `${origin}/blog` },
   ]
+  for (const p of allPosts()) urls.push({ loc: `${origin}/blog/${p.slug}`, lastmod: p.updated ?? p.date })
   const handles = new Set()
   for (let page = 1; page <= 100; page++) {
     const r = await fetchJson(`${apiUrl}/api/crackmes?sort=date&page=${page}&pageSize=100`)

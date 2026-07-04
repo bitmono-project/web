@@ -3,8 +3,9 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { crackmeCardPng, siteCardPng } from './og.mjs';
+import { blogCardPng, crackmeCardPng, siteCardPng } from './og.mjs';
 import { headFor, injectHead, buildSitemap } from './seo.mjs';
+import { blogRss, postBySlug } from './blog.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiUrl = process.env.API_URL ?? 'http://api:8430';
@@ -50,6 +51,18 @@ app.get('/og/challenge/:slug.png', async (req, res) => {
   }
 });
 
+app.get('/og/blog/:slug.png', (req, res) => {
+  const post = postBySlug(req.params.slug);
+  const png = post ? blogCardPng(post) : siteCardPng();
+  res.set('Content-Type', 'image/png').set('Cache-Control', 'public, max-age=86400').send(png);
+});
+
+// Full-text RSS — feed readers, plus a discovery channel for AI/search crawlers (autodiscovery
+// <link> is injected on every page below).
+app.get('/blog/rss.xml', (req, res) => {
+  res.set('Content-Type', 'application/rss+xml; charset=utf-8').set('Cache-Control', 'public, max-age=3600').send(blogRss(originOf(req)));
+});
+
 // XML sitemap — static routes + every public crackme + author profiles, fetched live from the API.
 app.get('/sitemap.xml', async (req, res) => {
   try {
@@ -67,10 +80,11 @@ app.use(express.static(distDir, { index: false }));
 // Twitter and JSON-LD injected before </head>. Crawlers (Google's first wave, Telegram, X, Discord,
 // AI bots) don't run JS, so all SEO-critical head tags must be server-rendered here.
 app.use(async (req, res) => {
-  const head = await headFor(req, { apiUrl, origin: originOf(req) });
+  const origin = originOf(req);
+  const head = await headFor(req, { apiUrl, origin });
   res.status(head.status ?? 200)
     .set('Content-Type', 'text/html; charset=utf-8')
-    .send(injectHead(template, head, { gscToken }));
+    .send(injectHead(template, head, { gscToken, rssUrl: `${origin}/blog/rss.xml` }));
 });
 
 app.listen(port, '0.0.0.0');

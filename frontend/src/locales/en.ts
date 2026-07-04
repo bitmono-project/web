@@ -8,6 +8,7 @@ export const en: Dict = {
     download: 'Download',
     crackmes: 'Crackmes',
     leaderboard: 'Leaderboard',
+    blog: 'Blog',
     review: 'Review',
     admin: 'Admin',
     docs: 'Docs',
@@ -17,6 +18,15 @@ export const en: Dict = {
     logout: 'logout',
     notifications: 'Notifications',
     language: 'Language',
+  },
+  blog: {
+    heading: 'Blog',
+    tagline: 'Notes from the BitMono project — .NET obfuscation, reverse engineering, and what ships.',
+    minRead: '{min} min read',
+    back: '← all posts',
+    by: 'by',
+    updated: 'updated {date}',
+    notFound: 'No such post.',
   },
   footer: {
     copy: '© bitmono — free & open-source obfuscator for .NET & Mono · web {version}',

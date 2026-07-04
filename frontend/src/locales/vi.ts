@@ -5,6 +5,7 @@ export const vi: Dict = {
     obfuscate: 'Làm rối mã',
     crackmes: 'Crackmes',
     leaderboard: 'Bảng xếp hạng',
+    blog: 'Blog',
     review: 'Kiểm duyệt',
     admin: 'Quản trị',
     docs: 'Tài liệu',
@@ -14,6 +15,15 @@ export const vi: Dict = {
     logout: 'đăng xuất',
     notifications: 'Thông báo',
     language: 'Ngôn ngữ',
+  },
+  blog: {
+    heading: 'Blog',
+    tagline: 'Ghi chép từ dự án BitMono — làm rối mã .NET, dịch ngược và những gì được phát hành.',
+    minRead: 'Đọc {min} phút',
+    back: '← tất cả bài viết',
+    by: 'bởi',
+    updated: 'cập nhật {date}',
+    notFound: 'Không có bài viết này.',
   },
   footer: {
     copy: '© bitmono — trình làm rối mã .NET và Mono mã nguồn mở miễn phí · web {version}',

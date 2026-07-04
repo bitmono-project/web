@@ -1,0 +1,18 @@
+# BitMono
+
+> Free & open-source obfuscator for .NET, Mono and Unity — obfuscate an assembly right in the browser at bitmono.dev, or via CLI, NuGet/MSBuild, Unity packages and GitHub Actions. The site also hosts a gallery of BitMono-obfuscated reverse-engineering challenges (crackmes) with writeups and a leaderboard.
+
+## Key pages
+
+- [Obfuscator](https://bitmono.dev/): drop a .dll/.exe, pick protections, download it obfuscated — nothing is stored
+- [Download](https://bitmono.dev/download): CLI, Unity package and NuGet builds for every runtime
+- [Crackmes](https://bitmono.dev/crackmes): downloadable .NET reverse-engineering challenges
+- [Blog](https://bitmono.dev/blog): notes on .NET obfuscation and reverse engineering
+- [Blog RSS](https://bitmono.dev/blog/rss.xml): full-text feed of new posts
+- [FAQ](https://bitmono.dev/faq): how the obfuscator and the crackmes gallery work
+
+## Documentation & source
+
+- [Docs](https://docs.bitmono.dev): every protection, configuration option and integration guide
+- [Engine on GitHub](https://github.com/bitmono-project/BitMono): MIT-licensed source
+- [Sitemap](https://bitmono.dev/sitemap.xml)

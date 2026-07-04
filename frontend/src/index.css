@@ -137,3 +137,73 @@ button:not(:disabled) {
   /* reduce ≠ remove: static brackets + wash still say which element is targeted */
   .hash-target::after { animation: none; opacity: 1; transform: none; }
 }
+
+/* Long-form article styling for rendered blog markdown — used by the client (BlogPost.tsx) and the
+   server-prerendered body (seo.mjs blogPostBody), so both renders look identical. */
+.blog-prose {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--color-ink) 82%, transparent);
+}
+.blog-prose p { margin: 0 0 1.1em; }
+.blog-prose a { color: var(--color-acid); text-decoration: none; }
+.blog-prose a:hover { text-decoration: underline; }
+.blog-prose strong { color: var(--color-ink); }
+.blog-prose h2, .blog-prose h3 {
+  font-family: var(--font-display);
+  color: var(--color-ink);
+  letter-spacing: -0.01em;
+}
+.blog-prose h2 { font-size: 1.65rem; font-weight: 800; margin: 2.1em 0 0.7em; }
+.blog-prose h3 { font-size: 1.2rem; font-weight: 700; margin: 1.8em 0 0.6em; }
+/* Hover-revealed # link the heading renderer appends (blog.mjs / lib/blog.ts). */
+.blog-prose .anchor {
+  margin-left: 0.45em;
+  color: var(--color-faint);
+  opacity: 0;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 0.8em;
+  transition: opacity 0.15s ease;
+}
+.blog-prose h2:hover .anchor, .blog-prose h3:hover .anchor { opacity: 1; }
+.blog-prose .anchor:hover { color: var(--color-acid); text-decoration: none; }
+.blog-prose ul, .blog-prose ol { margin: 0 0 1.1em; padding-left: 1.4em; }
+.blog-prose li { margin: 0.35em 0; }
+.blog-prose li::marker { color: var(--color-acid-dim); }
+.blog-prose code {
+  font-size: 0.92em;
+  color: var(--color-ink);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-line);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+}
+.blog-prose pre {
+  margin: 0 0 1.2em;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+}
+.blog-prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: color-mix(in srgb, var(--color-ink) 90%, transparent);
+}
+.blog-prose blockquote {
+  margin: 0 0 1.1em;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 2px solid var(--color-acid);
+  color: var(--color-muted);
+}
+.blog-prose hr { margin: 2em 0; border: none; border-top: 1px solid var(--color-line); }
+.blog-prose img { max-width: 100%; border-radius: 12px; border: 1px solid var(--color-line); }
+.blog-prose table { width: 100%; margin: 0 0 1.2em; border-collapse: collapse; font-size: 12.5px; }
+.blog-prose th, .blog-prose td { border: 1px solid var(--color-line); padding: 0.5em 0.7em; text-align: left; }
+.blog-prose th { color: var(--color-ink); background: var(--color-surface); }

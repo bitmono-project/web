@@ -74,6 +74,7 @@ function Header() {
         <Link to="/download" className="transition-colors hover:text-ink">{t('nav.download')}</Link>
         <Link to="/crackmes" className="transition-colors hover:text-ink">{t('nav.crackmes')}</Link>
         <Link to="/leaderboard" className="transition-colors hover:text-ink">{t('nav.leaderboard')}</Link>
+        <Link to="/blog" className="transition-colors hover:text-ink">{t('nav.blog')}</Link>
         {isModerator(me) && !isAdmin(me) && <Link to="/moderation" className="transition-colors hover:text-ink">{t('nav.review')}</Link>}
         {isAdmin(me) && <Link to="/admin" className="transition-colors hover:text-acid">{t('nav.admin')}</Link>}
         <a href="https://docs.bitmono.dev" className="hidden transition-colors hover:text-ink sm:inline">{t('nav.docs')}</a>

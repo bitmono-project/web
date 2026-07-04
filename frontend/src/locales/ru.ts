@@ -5,6 +5,7 @@ export const ru: Dict = {
     obfuscate: 'Обфускация',
     crackmes: 'Крякми',
     leaderboard: 'Таблица лидеров',
+    blog: 'Блог',
     review: 'Проверка',
     admin: 'Админ',
     docs: 'Документация',
@@ -14,6 +15,15 @@ export const ru: Dict = {
     logout: 'выход',
     notifications: 'Уведомления',
     language: 'Язык',
+  },
+  blog: {
+    heading: 'Блог',
+    tagline: 'Заметки проекта BitMono — обфускация .NET, реверс-инжиниринг и то, что выходит в релизах.',
+    minRead: '{min} мин чтения',
+    back: '← все посты',
+    by: 'автор:',
+    updated: 'обновлено {date}',
+    notFound: 'Такого поста нет.',
   },
   footer: {
     copy: '© bitmono — бесплатный обфускатор с открытым исходным кодом для .NET и Mono · web {version}',

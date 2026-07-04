@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AuthProvider } from './lib/auth'
@@ -17,6 +18,10 @@ import Terms from './pages/Terms'
 import FAQ from './pages/FAQ'
 import Ranks from './pages/Ranks'
 import Download from './pages/Download'
+
+// Lazy — the blog chunk bundles every post's markdown, so it stays out of the main bundle.
+const BlogList = lazy(() => import('./pages/BlogList'))
+const BlogPost = lazy(() => import('./pages/BlogPost'))
 
 export default function App() {
   return (
@@ -40,6 +45,8 @@ export default function App() {
             <Route path="faq" element={<FAQ />} />
             <Route path="ranks" element={<Ranks />} />
             <Route path="download" element={<Download />} />
+            <Route path="blog" element={<Suspense fallback={null}><BlogList /></Suspense>} />
+            <Route path="blog/:slug" element={<Suspense fallback={null}><BlogPost /></Suspense>} />
           </Route>
         </Routes>
       </BrowserRouter>

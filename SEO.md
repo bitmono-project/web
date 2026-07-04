@@ -12,7 +12,10 @@ Served by the frontend Node server (`frontend/server.mjs` + `frontend/seo.mjs`),
 - **Open Graph + Twitter cards** + dynamic 1200×630 preview images (already existed; now title/description are per-route too).
 - **JSON-LD structured data**: `WebSite` + `Organization` + `SoftwareApplication` on home; `CreativeWork`/`LearningResource` + `BreadcrumbList` per crackme (with a quality-based `AggregateRating` once it has votes); `ProfilePage` + `Person` per user.
 - **`robots.txt`** (`frontend/public/robots.txt`) — allows **everyone**, including AI crawlers; points at the sitemap.
-- **`sitemap.xml`** (`/sitemap.xml`) — generated live: static pages + every public crackme (with `lastmod`) + author profiles.
+- **`sitemap.xml`** (`/sitemap.xml`) — generated live: static pages + every public crackme (with `lastmod`) + author profiles + every blog post (with `lastmod`).
+- **Blog** (`/blog`, `/blog/:slug`) — posts are markdown in `frontend/blog/*.md` (frontmatter: `title`, `description`, `date`, optional `updated`, `author`, `authorUrl`); `frontend/blog.mjs` renders them server-side, so crawlers get the **full article HTML**, `BlogPosting` + `BreadcrumbList` JSON-LD, `article:published_time`/`modified_time` OG tags and a per-post OG card (`/og/blog/:slug.png`). Unknown slugs return **HTTP 404**.
+- **`/blog/rss.xml`** — full-text RSS, autodiscovery `<link>` injected on every page (feed readers + AI crawler discovery).
+- **`/llms.txt`** (`frontend/public/llms.txt`) — site summary + key URLs for AI search engines; update it if top-level sections change.
 - The browser tab title also updates on client-side navigation (`frontend/src/lib/useTitle.ts`).
 
 Optional env var: set **`GSC_VERIFICATION`** on the frontend container to inject `<meta name="google-site-verification">` — only needed for the meta-tag fallback below (DNS verification doesn't need it).
@@ -46,6 +49,15 @@ Cloudflare dashboard → `bitmono.dev` → **Caching → Configuration** → tur
 Search Console **Pages**, **Sitemaps**, **Core Web Vitals**, and **Enhancements/Rich results**. Validate structured data anytime at https://search.google.com/test/rich-results.
 
 > **Not applicable:** Google's Indexing API (restricted to JobPosting/BroadcastEvent) — don't use it; the sitemap is the right mechanism here.
+
+---
+
+## Publishing a blog post
+
+1. Add `frontend/blog/<slug>.md` — the filename is the URL (`/blog/<slug>`): short, kebab-case, keyword-rich, **no dates in the slug**. Frontmatter `description` ≤ 160 chars (it's the SERP snippet), body starts at `##` (the page renders the title as `<h1>`).
+2. `cd frontend && npm test` (smoke-checks frontmatter, heading ids, RSS) — then commit and deploy. Sitemap, RSS, JSON-LD and the OG card pick the post up automatically.
+3. Optional: Search Console → URL Inspection → request indexing for the new URL (the sitemap handles it anyway).
+4. Quality bar (Google doesn't penalize AI-written content, it penalizes *unhelpful* content): real facts about the engine, named author, honest claims — no filler, no scaled fluff.
 
 ---
 

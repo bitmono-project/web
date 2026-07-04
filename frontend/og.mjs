@@ -134,6 +134,38 @@ function toPng(svg) {
   }).render().asPng()
 }
 
+export function blogSvg(p) {
+  const title = (p.title || 'post').trim()
+  const oneLine = title.length <= 24
+  const tSize = oneLine ? 72 : 52
+  const lines = oneLine ? [title] : wrap(title, 32, 3)
+
+  let svg = brand(72, 96, 46)
+  svg += `<text x="1128" y="94" text-anchor="end" font-family="JetBrains Mono" font-weight="700" font-size="20" letter-spacing="7" fill="${C.acid}">BLOG</text>`
+
+  let y = oneLine ? 250 : 216
+  for (const l of lines) {
+    svg += `<text x="72" y="${y}" font-family="JetBrains Mono" font-weight="700" font-size="${tSize}" fill="${C.ink}">${esc(l)}</text>`
+    y += tSize + 10
+  }
+
+  y += 16
+  // Pre-ellipsize so a two-line cut never ends mid-sentence without the '…'.
+  for (const l of wrap(fit(p.description || '', 115), 62, 2)) {
+    svg += `<text x="72" y="${y}" font-family="JetBrains Mono" font-size="26" fill="${C.muted}">${esc(l)}</text>`
+    y += 38
+  }
+
+  svg += `<text x="72" y="${y + 26}" font-family="JetBrains Mono" font-size="22" fill="${C.acid}">${esc(p.date)}  ·  ${p.minutes} min read  ·  by ${esc(fit(p.author || 'BitMono', 30))}</text>`
+
+  svg += `<line x1="72" y1="556" x2="1128" y2="556" stroke="${C.line}"/>`
+  // Blog slugs run long — fit to 42 chars so the URL never collides with the right-side tag.
+  svg += `<text x="72" y="596" font-family="JetBrains Mono" font-size="22" fill="${C.muted}">${esc(fit('bitmono.dev/blog/' + (p.slug || ''), 42))}</text>`
+  svg += `<text x="1128" y="596" text-anchor="end" font-family="JetBrains Mono" font-size="22" fill="${C.faint}">free &amp; open-source obfuscator</text>`
+  return shell(svg)
+}
+
 let siteCache = null
 export function siteCardPng() { return (siteCache ??= toPng(siteSvg())) }
 export function crackmeCardPng(c) { return toPng(crackmeSvg(c)) }
+export function blogCardPng(p) { return toPng(blogSvg(p)) }

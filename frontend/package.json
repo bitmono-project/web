@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --experimental-strip-types src/lib/peRefs.selfcheck.ts",
+    "test": "node --experimental-strip-types src/lib/peRefs.selfcheck.ts && node blog.smoke.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
+    "marked": "^18.0.5",
     "motion": "^12.40.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

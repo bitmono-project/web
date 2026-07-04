@@ -5,6 +5,7 @@ export const th: Dict = {
     obfuscate: 'พรางโค้ด',
     crackmes: 'Crackmes',
     leaderboard: 'อันดับ',
+    blog: 'บล็อก',
     review: 'ตรวจสอบ',
     admin: 'แอดมิน',
     docs: 'เอกสาร',
@@ -14,6 +15,15 @@ export const th: Dict = {
     logout: 'ออกจากระบบ',
     notifications: 'การแจ้งเตือน',
     language: 'ภาษา',
+  },
+  blog: {
+    heading: 'บล็อก',
+    tagline: 'บันทึกจากโปรเจกต์ BitMono — การพรางโค้ด .NET, reverse engineering และสิ่งที่ปล่อยออกมาในแต่ละรุ่น',
+    minRead: 'อ่าน {min} นาที',
+    back: '← โพสต์ทั้งหมด',
+    by: 'โดย',
+    updated: 'อัปเดตเมื่อ {date}',
+    notFound: 'ไม่พบโพสต์นี้',
   },
   footer: {
     copy: '© bitmono — โปรแกรมพรางโค้ด .NET และ Mono แบบโอเพนซอร์สฟรี · web {version}',
