@@ -134,7 +134,7 @@ export default function CrackmeDetail() {
       <ReportControl slug={c.slug} />
       <ModerationHistory slug={c.slug} />
 
-      <HintsPanel slug={c.slug} me={me} isOwner={c.isOwner} solved={c.solvedByMe} />
+      <HintsPanel slug={c.slug} me={me} canManage={c.isOwner || isAdmin(me)} solved={c.solvedByMe} />
       <RatingsPanel slug={c.slug} me={me} initial={c} />
       <WriteupsPanel slug={c.slug} me={me} isOwner={c.isOwner} zipPassword={zipPassword} turnstileSiteKey={turnstileSiteKey} />
       <CommentsPanel slug={c.slug} crackmeId={c.id} me={me} commentReactionsEnabled={c.commentReactionsEnabled} commentsLocked={c.commentsLocked} turnstileSiteKey={turnstileSiteKey} />
@@ -785,7 +785,7 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
 // Author-written, point-costed hints. Owners write/manage them (bodies always visible to the author);
 // solvers see locked cards and pay a % of the solve to reveal — the biggest one unlocked is deducted at
 // solve time. Free once you've solved it. Self-hides when there are no hints and you're not the owner.
-function HintsPanel({ slug, me, isOwner, solved }: { slug: string; me: Me | null; isOwner: boolean; solved: boolean }) {
+function HintsPanel({ slug, me, canManage, solved }: { slug: string; me: Me | null; canManage: boolean; solved: boolean }) {
   const [hints, setHints] = useState<HintItem[]>([])
   const [loaded, setLoaded] = useState(false)
   const [confirmUnlock, setConfirmUnlock] = useState<HintItem | null>(null)
@@ -814,19 +814,19 @@ function HintsPanel({ slug, me, isOwner, solved }: { slug: string; me: Me | null
   }
 
   if (!loaded) return null
-  if (hints.length === 0 && !isOwner) return null
+  if (hints.length === 0 && !canManage) return null
 
   return (
     <div className="mt-10">
       <div className="mb-3 flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-wider text-faint">
-          Hints ({hints.length}){!isOwner && !solved && hints.length > 0 && <span className="ml-2 normal-case text-faint">· unlocking one costs points</span>}
+          Hints ({hints.length}){!canManage && !solved && hints.length > 0 && <span className="ml-2 normal-case text-faint">· unlocking one costs points</span>}
         </span>
-        {isOwner && <button onClick={() => setAdding((o) => !o)} className="font-mono text-[12px] text-acid hover:underline">{adding ? 'cancel' : '+ add a hint'}</button>}
+        {canManage && <button onClick={() => setAdding((o) => !o)} className="font-mono text-[12px] text-acid hover:underline">{adding ? 'cancel' : '+ add a hint'}</button>}
       </div>
 
       {hints.length === 0 ? (
-        <p className="font-mono text-[13px] text-faint">No hints{isOwner ? ' yet — add one to help stuck solvers (they’ll pay points to reveal it).' : '.'}</p>
+        <p className="font-mono text-[13px] text-faint">No hints{canManage ? ' yet — add one to help stuck solvers (they’ll pay points to reveal it).' : '.'}</p>
       ) : (
         <div className="space-y-2">
           {hints.map((h, i) => {
@@ -835,7 +835,7 @@ function HintsPanel({ slug, me, isOwner, solved }: { slug: string; me: Me | null
               <div key={h.id} className={`rounded-lg border p-3 ${open ? 'border-line bg-surface/30' : 'border-dashed border-line bg-void/30'}`}>
                 <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-faint">
                   <span>Hint {i + 1} <span className="text-acid">· −{h.costPercent}%</span></span>
-                  {isOwner && <button onClick={() => remove(h.id)} className="transition-colors hover:text-red-400">delete</button>}
+                  {canManage && <button onClick={() => remove(h.id)} className="transition-colors hover:text-red-400">delete</button>}
                 </div>
                 {open ? (
                   <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{h.body}</p>
@@ -854,7 +854,7 @@ function HintsPanel({ slug, me, isOwner, solved }: { slug: string; me: Me | null
         </div>
       )}
 
-      {isOwner && adding && (
+      {canManage && adding && (
         <div className="mt-3 rounded-lg border border-dashed border-line bg-void/30 p-3">
           <textarea
             autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} rows={3} maxLength={2000}
