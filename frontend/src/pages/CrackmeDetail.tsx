@@ -571,7 +571,7 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
       <div className="space-y-3">
         {comments.length === 0 && <p className="font-mono text-[13px] text-faint">No comments yet.</p>}
         {comments.map((cm) => (
-          <div key={cm.id} className={`rounded-lg border border-line bg-surface/30 p-3 ${cm.isHidden ? 'opacity-60' : ''}`}>
+          <div key={cm.id} id={`comment-${cm.id}`} className={`rounded-lg border border-line bg-surface/30 p-3 ${cm.isHidden ? 'opacity-60' : ''}`}>
             {cm.isDeleted ? (
               <p className="font-mono text-[12px] italic text-faint">// comment deleted by its author</p>
             ) : (
@@ -797,7 +797,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
       <div className="space-y-3">
         {writeups.length === 0 && <p className="font-mono text-[13px] text-faint">No writeups yet — be the first.</p>}
         {writeups.map((w) => (
-          <div key={w.id} className={`rounded-lg border bg-surface/30 p-4 ${w.isAuthorPick ? 'border-acid/50' : 'border-line'}`}>
+          <div key={w.id} id={`writeup-${w.id}`} className={`rounded-lg border bg-surface/30 p-4 ${w.isAuthorPick ? 'border-acid/50' : 'border-line'}`}>
             <div className="font-mono text-[11px] text-faint">
               {w.isAuthorPick && <span className="mr-2 rounded border border-acid/50 px-1.5 py-px text-[10px] uppercase tracking-wider text-acid">★ intended solution</span>}
               {w.title ?? 'Writeup'} · {w.author} · {formatDate(w.createdAt)}
