@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { BlogActions } from '../components/BlogActions'
 import { postBySlug, renderMarkdown } from '../lib/blog'
 import { useI18n } from '../lib/i18n'
 import { useTitle } from '../lib/useTitle'
@@ -45,6 +46,7 @@ export default function BlogPost() {
             ? <a href={post.authorUrl} rel="author" className="text-acid hover:underline">{post.author}</a>
             : <span className="text-ink">{post.author}</span>}
         </p>
+        <BlogActions post={post} />
         <div className="blog-prose mt-8" dangerouslySetInnerHTML={{ __html: html }} />
       </article>
       <div className="mt-12 border-t border-line pt-6">

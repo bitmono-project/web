@@ -24,6 +24,13 @@ export const th: Dict = {
     by: 'โดย',
     updated: 'อัปเดตเมื่อ {date}',
     notFound: 'ไม่พบโพสต์นี้',
+    copyMd: 'คัดลอก Markdown',
+    copied: 'คัดลอกแล้ว ✓',
+    open: 'เปิด',
+    share: 'แชร์',
+    viewMd: 'ดูแบบ Markdown',
+    openIn: 'เปิดใน {tool}',
+    shareOn: 'แชร์ไปยัง {net}',
   },
   footer: {
     copy: '© bitmono — โปรแกรมพรางโค้ด .NET และ Mono แบบโอเพนซอร์สฟรี · web {version}',

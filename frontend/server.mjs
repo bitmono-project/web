@@ -63,6 +63,17 @@ app.get('/blog/rss.xml', (req, res) => {
   res.set('Content-Type', 'application/rss+xml; charset=utf-8').set('Cache-Control', 'public, max-age=3600').send(blogRss(originOf(req)));
 });
 
+// Raw markdown of a post — the "Copy Markdown" / "Open in <AI>" actions point here, and it's the
+// cheapest thing to hand an LLM. noindex: the HTML page is the canonical copy.
+app.get('/blog/:slug.md', (req, res) => {
+  const post = postBySlug(req.params.slug);
+  if (!post) return res.status(404).end();
+  res.set('Content-Type', 'text/markdown; charset=utf-8')
+    .set('Cache-Control', 'public, max-age=3600')
+    .set('X-Robots-Tag', 'noindex')
+    .send(`# ${post.title}\n\n${post.body}`);
+});
+
 // XML sitemap — static routes + every public crackme + author profiles, fetched live from the API.
 app.get('/sitemap.xml', async (req, res) => {
   try {

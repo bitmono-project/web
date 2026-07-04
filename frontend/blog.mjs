@@ -54,6 +54,7 @@ const posts = readdirSync(dir)
       authorUrl: meta.authorUrl ?? null,
       minutes: Math.max(1, Math.round(words / 220)),
       words,
+      body,
       html: renderMarkdown(body),
     }
   })

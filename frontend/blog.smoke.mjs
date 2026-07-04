@@ -9,6 +9,7 @@ for (const p of posts) {
   assert.match(p.date, /^\d{4}-\d{2}-\d{2}$/, `date is YYYY-MM-DD: ${p.slug}`)
   assert.ok(p.description.length <= 160, `description fits a SERP snippet (<=160): ${p.slug}`)
   assert.match(p.html, /<h2 id="/, `headings carry deep-link ids: ${p.slug}`)
+  assert.ok(p.body.length > 200, `raw markdown body kept (serves /blog/:slug.md): ${p.slug}`)
   assert.ok(!p.html.includes('<h1'), `no h1 in body (the page renders the title): ${p.slug}`)
 }
 assert.deepEqual([...posts].sort((a, b) => b.date.localeCompare(a.date) || a.slug.localeCompare(b.slug)), posts, 'sorted newest first')

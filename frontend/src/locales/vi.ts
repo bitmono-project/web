@@ -24,6 +24,13 @@ export const vi: Dict = {
     by: 'bởi',
     updated: 'cập nhật {date}',
     notFound: 'Không có bài viết này.',
+    copyMd: 'Sao chép Markdown',
+    copied: 'đã sao chép ✓',
+    open: 'Mở',
+    share: 'Chia sẻ',
+    viewMd: 'Xem dạng Markdown',
+    openIn: 'Mở trong {tool}',
+    shareOn: 'Chia sẻ lên {net}',
   },
   footer: {
     copy: '© bitmono — trình làm rối mã .NET và Mono mã nguồn mở miễn phí · web {version}',

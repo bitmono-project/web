@@ -15,6 +15,7 @@ Served by the frontend Node server (`frontend/server.mjs` + `frontend/seo.mjs`),
 - **`sitemap.xml`** (`/sitemap.xml`) — generated live: static pages + every public crackme (with `lastmod`) + author profiles + every blog post (with `lastmod`).
 - **Blog** (`/blog`, `/blog/:slug`) — posts are markdown in `frontend/blog/*.md` (frontmatter: `title`, `description`, `date`, optional `updated`, `author`, `authorUrl`); `frontend/blog.mjs` renders them server-side, so crawlers get the **full article HTML**, `BlogPosting` + `BreadcrumbList` JSON-LD, `article:published_time`/`modified_time` OG tags and a per-post OG card (`/og/blog/:slug.png`). Unknown slugs return **HTTP 404**.
 - **`/blog/rss.xml`** — full-text RSS, autodiscovery `<link>` injected on every page (feed readers + AI crawler discovery).
+- **`/blog/:slug.md`** — raw markdown of each post (`X-Robots-Tag: noindex`; the HTML page stays canonical). Backs the post's "Copy Markdown" / "Open in Copilot·Claude·ChatGPT" / share actions (`BlogActions.tsx`).
 - **`/llms.txt`** (`frontend/public/llms.txt`) — site summary + key URLs for AI search engines; update it if top-level sections change.
 - The browser tab title also updates on client-side navigation (`frontend/src/lib/useTitle.ts`).
 

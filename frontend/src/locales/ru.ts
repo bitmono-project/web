@@ -24,6 +24,13 @@ export const ru: Dict = {
     by: 'автор:',
     updated: 'обновлено {date}',
     notFound: 'Такого поста нет.',
+    copyMd: 'Копировать Markdown',
+    copied: 'скопировано ✓',
+    open: 'Открыть',
+    share: 'Поделиться',
+    viewMd: 'Открыть как Markdown',
+    openIn: 'Открыть в {tool}',
+    shareOn: 'Поделиться в {net}',
   },
   footer: {
     copy: '© bitmono — бесплатный обфускатор с открытым исходным кодом для .NET и Mono · web {version}',

@@ -27,6 +27,13 @@ export const en: Dict = {
     by: 'by',
     updated: 'updated {date}',
     notFound: 'No such post.',
+    copyMd: 'Copy Markdown',
+    copied: 'copied ✓',
+    open: 'Open',
+    share: 'Share',
+    viewMd: 'View in Markdown',
+    openIn: 'Open in {tool}',
+    shareOn: 'Share on {net}',
   },
   footer: {
     copy: '© bitmono — free & open-source obfuscator for .NET & Mono · web {version}',

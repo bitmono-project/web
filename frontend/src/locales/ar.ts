@@ -25,6 +25,13 @@ export const ar: Dict = {
     by: 'بقلم',
     updated: 'حُدِّث {date}',
     notFound: 'لا توجد هذه المقالة.',
+    copyMd: 'نسخ Markdown',
+    copied: 'تم النسخ ✓',
+    open: 'فتح',
+    share: 'مشاركة',
+    viewMd: 'عرض بصيغة Markdown',
+    openIn: 'فتح في {tool}',
+    shareOn: 'مشاركة على {net}',
   },
   footer: {
     copy: '© bitmono — مشوّش مفتوح المصدر ومجاني لـ .NET و Mono · web {version}',

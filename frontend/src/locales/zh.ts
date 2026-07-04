@@ -24,6 +24,13 @@ export const zh: Dict = {
     by: '作者：',
     updated: '更新于 {date}',
     notFound: '没有这篇文章。',
+    copyMd: '复制 Markdown',
+    copied: '已复制 ✓',
+    open: '打开',
+    share: '分享',
+    viewMd: '查看 Markdown 原文',
+    openIn: '在 {tool} 中打开',
+    shareOn: '分享到 {net}',
   },
   footer: {
     copy: '© bitmono — 免费开源的 .NET 与 Mono 混淆器 · web {version}',
