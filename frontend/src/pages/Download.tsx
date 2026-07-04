@@ -1,9 +1,9 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useTitle } from '../lib/useTitle'
 import {
-  getLatestRelease, detectOs, formatSize, shortSha, uniq,
+  getReleases, detectOs, formatSize, shortSha, uniq,
   OS_LABEL, ARCH_LABEL, OS_ORDER, ARCH_ORDER, TFMS, RECOMMENDED_TFM, tfmLabel, tfmChip,
-  type LatestRelease, type ReleaseAsset, type Os, type Arch,
+  type Release, type ReleaseAsset, type Os, type Arch,
 } from '../lib/releases'
 
 const d = (ms: number): CSSProperties => ({ ['--d' as string]: `${ms}ms` } as CSSProperties)
@@ -16,7 +16,8 @@ type UnityFormat = 'unitypackage' | 'upm'
 
 export default function Download() {
   useTitle('Download BitMono')
-  const [rel, setRel] = useState<LatestRelease | null>(null)
+  const [releases, setReleases] = useState<Release[]>([])
+  const [ver, setVer] = useState('')
   const [loading, setLoading] = useState(true)
   const [path, setPath] = useState<Path>('cli')
 
@@ -33,9 +34,15 @@ export default function Download() {
 
   useEffect(() => {
     setOs(detectOs())
-    getLatestRelease().then((r) => { setRel(r); setLoading(false) })
+    getReleases().then((r) => {
+      if (r) { setReleases(r.releases); setVer(r.latest) }
+      setLoading(false)
+    })
   }, [])
 
+  // The selected release drives everything below; default to (and fall back to) the latest.
+  const rel = releases.find((r) => r.version === ver) ?? releases[0] ?? null
+  const latest = releases[0]?.version ?? ''
   const assets = rel?.assets ?? []
   const cli = assets.filter((a) => a.kind === 'cli')
 
@@ -57,7 +64,9 @@ export default function Download() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 pb-24">
-      <section className="pt-12 text-center md:pt-16">
+      {/* z-30: every `.rise` section below settles at transform:translateY(0) — a permanent stacking context —
+          so without lifting the header the version dropdown renders behind (and can't be clicked through). */}
+      <section className="relative z-30 pt-12 text-center md:pt-16">
         <h1 className="rise font-display text-4xl font-extrabold tracking-tight text-ink md:text-5xl" style={d(0)}>
           Download <span className="text-acid acid-glow">BitMono</span>
         </h1>
@@ -65,13 +74,13 @@ export default function Download() {
           The real engine — the same build that ships on NuGet and runs in CI. Answer one question, get the
           exact file for your setup.
         </p>
-        <div className="rise mt-4 font-mono text-[12px] text-faint" style={d(140)}>
-          {loading ? '—' : rel ? (
-            <a href={rel.htmlUrl} target="_blank" rel="noreferrer" className="text-muted transition-colors hover:text-acid hover:underline">
-              v{rel.version} · released {fmtDate(rel.publishedAt)} ↗
-            </a>
+        <div className="rise mt-4 flex justify-center" style={d(140)}>
+          {loading ? (
+            <span className="font-mono text-[12px] text-faint">—</span>
+          ) : rel ? (
+            <VersionPicker releases={releases} value={rel.version} latest={latest} onChange={setVer} />
           ) : (
-            <a href="https://github.com/bitmono-project/BitMono/releases/latest" target="_blank" rel="noreferrer" className="text-muted hover:text-acid">
+            <a href="https://github.com/bitmono-project/BitMono/releases/latest" target="_blank" rel="noreferrer" className="font-mono text-[12px] text-muted hover:text-acid">
               releases on GitHub ↗
             </a>
           )}
@@ -190,6 +199,57 @@ export default function Download() {
         {path === 'nuget' && <CiCard version={rel?.version ?? ''} />}
       </section>
     </main>
+  )
+}
+
+// Version selector for the download page. Collapses to plain text when there's only one release to pick
+// (the common case today), and opens a themed dropdown once older versions exist. Latest is badged; each
+// row links nowhere — selecting swaps the whole chooser to that version's assets client-side.
+function VersionPicker({ releases, value, latest, onChange }: {
+  releases: Release[]; value: string; latest: string; onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+
+  const sel = releases.find((r) => r.version === value)
+  if (!sel) return null
+  const many = releases.length > 1
+
+  return (
+    <div ref={ref} className="relative flex items-center gap-2 font-mono text-[12px]">
+      {many ? (
+        <button onClick={() => setOpen((v) => !v)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-muted transition-colors hover:border-acid/40 hover:text-acid">
+          v{sel.version}
+          {sel.version === latest && <span className="text-[9px] text-acid/80">latest</span>}
+          <span className={`text-acid transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+        </button>
+      ) : (
+        <span className="text-muted">v{sel.version}</span>
+      )}
+      <span className="text-faint">
+        released {fmtDate(sel.publishedAt)} ·{' '}
+        <a href={sel.htmlUrl} target="_blank" rel="noreferrer" className="text-muted transition-colors hover:text-acid hover:underline">notes ↗</a>
+      </span>
+
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-2 max-h-72 w-60 overflow-y-auto rounded-xl border border-line bg-void/95 p-1 text-left shadow-xl backdrop-blur">
+          {releases.map((r) => (
+            <button key={r.version} onClick={() => { onChange(r.version); setOpen(false) }}
+              className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors ${r.version === value ? 'bg-surface/60 text-acid' : 'text-muted hover:bg-surface/40 hover:text-ink'}`}>
+              <span>v{r.version}{r.version === latest && <span className="ml-1.5 text-[9px] text-acid/70">latest</span>}</span>
+              <span className="text-faint">{fmtDate(r.publishedAt)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

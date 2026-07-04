@@ -22,7 +22,7 @@ export interface ReleaseAsset {
   vt: { status: string; flagged: number; total: number } | null
 }
 
-export interface LatestRelease {
+export interface Release {
   version: string
   tag: string
   publishedAt: string
@@ -30,11 +30,18 @@ export interface LatestRelease {
   assets: ReleaseAsset[]
 }
 
-export async function getLatestRelease(): Promise<LatestRelease | null> {
+export interface ReleasesResponse {
+  latest: string
+  releases: Release[]   // newest first; releases[0] is the latest
+}
+
+// Every downloadable release (>= 0.43.0), newest first — one fetch powers both the version picker and the
+// per-version asset chooser, so switching versions is instant and needs no extra round-trip.
+export async function getReleases(): Promise<ReleasesResponse | null> {
   try {
-    const res = await fetch('/api/releases/latest')
+    const res = await fetch('/api/releases')
     if (!res.ok) return null
-    return (await res.json()) as LatestRelease
+    return (await res.json()) as ReleasesResponse
   } catch {
     return null
   }

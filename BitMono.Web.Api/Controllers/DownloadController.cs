@@ -13,9 +13,9 @@ public sealed class DownloadController(
     CrackmesDbContext db,
     ILogger<DownloadController> logger) : ControllerBase
 {
-    // Stable, shareable download links that always resolve to the CURRENT release, e.g.
-    // /download/cli/net8.0/win-x64 or /download/unity/2022/unitypackage. We stream the file through so the
-    // URL stays ours (clean + versionless) and we can count downloads — GitHub stays the source of truth.
+    // Stable, shareable download links. A bare slug resolves to the CURRENT release (e.g.
+    // /download/cli/net8.0/win-x64); a version-scoped slug pins a specific one (/download/0.43.0/cli/…). We
+    // stream the file through so the URL stays ours (clean) and we can count downloads — GitHub stays source of truth.
     [HttpGet("download/{**slug}")]
     [EnableRateLimiting("download")]
     public async Task<IActionResult> Get(string slug, CancellationToken ct)
@@ -33,7 +33,7 @@ public sealed class DownloadController(
         }
         HttpContext.Response.RegisterForDispose(upstream);
 
-        await IncrementAsync(asset.Slug, ct);
+        await IncrementAsync(slug, ct);   // key on the requested slug so each version counts on its own
 
         Response.Headers.CacheControl = "public, max-age=300";
         if (upstream.Content.Headers.ContentLength is { } len)

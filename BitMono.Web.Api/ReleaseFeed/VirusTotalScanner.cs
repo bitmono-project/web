@@ -35,7 +35,9 @@ public sealed class VirusTotalScanner(
             return;
         }
 
-        var data = await catalog.GetAsync(ct);
+        // Scan only the latest release's assets: older versions keep whatever verdict they earned while they
+        // were latest, so we never re-spend the free-tier quota walking the whole back catalogue.
+        var data = await catalog.GetLatestAsync(ct);
         if (data is null)
             return;
 

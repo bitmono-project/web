@@ -25,9 +25,13 @@ public sealed record ReleaseAsset(
 // submitted, awaiting analysis. Absent entirely when scanning is off (no API key) or the file is brand new.
 public sealed record AssetScan(string Status, int Flagged, int Total);
 
-public sealed record LatestReleaseResponse(
+public sealed record ReleaseResponse(
     string Version,
     string Tag,
     DateTimeOffset PublishedAt,
     string HtmlUrl,
     IReadOnlyList<ReleaseAsset> Assets);
+
+// All downloadable releases (>= ReleaseCatalog.MinVersion), newest first, with the latest version called out
+// so the picker can badge it. Powers the download page's version selector in a single fetch.
+public sealed record ReleasesResponse(string Latest, IReadOnlyList<ReleaseResponse> Releases);
