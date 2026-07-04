@@ -16,26 +16,32 @@ type UnityFormat = 'unitypackage' | 'upm'
 
 export default function Download() {
   useTitle('Download BitMono')
+  // Shareable selection: every pick seeds from the query string, and a mirror effect below keeps the
+  // URL current — the address bar is always a link to this exact version/runtime/OS/arch.
+  const [init] = useState(() => Object.fromEntries(new URLSearchParams(window.location.search)))
   const [releases, setReleases] = useState<Release[]>([])
   const [ver, setVer] = useState('')
   const [loading, setLoading] = useState(true)
-  const [path, setPath] = useState<Path>('cli')
+  const [path, setPath] = useState<Path>(init.path === 'unity' || init.path === 'nuget' ? (init.path as Path) : 'cli')
 
   // CLI selections
-  const [tfm, setTfm] = useState(RECOMMENDED_TFM)
-  const [os, setOs] = useState<Os>('win')
-  const [arch, setArch] = useState<Arch>('x64')
-  const [showOsArch, setShowOsArch] = useState(false)
+  const [tfm, setTfm] = useState(init.tfm ?? RECOMMENDED_TFM)
+  const [os, setOs] = useState<Os>((init.os as Os) ?? 'win')
+  const [arch, setArch] = useState<Arch>((init.arch as Arch) ?? 'x64')
+  const [showOsArch, setShowOsArch] = useState(Boolean(init.os || init.arch))
   const [showAll, setShowAll] = useState(false)
 
   // Unity selections
-  const [unityMajor, setUnityMajor] = useState('')
-  const [unityFormat, setUnityFormat] = useState<UnityFormat>('unitypackage')
+  const [unityMajor, setUnityMajor] = useState(init.unity ?? '')
+  const [unityFormat, setUnityFormat] = useState<UnityFormat>(init.format === 'upm' ? 'upm' : 'unitypackage')
 
   useEffect(() => {
-    setOs(detectOs())
+    if (!init.os) setOs(detectOs()) // a shared link's OS wins over detection
     getReleases().then((r) => {
-      if (r) { setReleases(r.releases); setVer(r.latest) }
+      if (r) {
+        setReleases(r.releases)
+        setVer(init.v && r.releases.some((x) => x.version === init.v) ? init.v : r.latest)
+      }
       setLoading(false)
     })
   }, [])
@@ -61,6 +67,15 @@ export default function Download() {
   const unityMajors = uniq([...unityPkg, ...unityUpm].map((a) => a.unityMajor as string)).sort((a, b) => Number(a) - Number(b))
   const curMajor = unityMajors.includes(unityMajor) ? unityMajor : (unityMajors[unityMajors.length - 1] ?? '')
   const unityAsset = (unityFormat === 'upm' ? unityUpm : unityPkg).find((a) => a.unityMajor === curMajor) ?? null
+
+  // Mirror the effective (clamped) picks into the query string — replaceState, so chip clicks don't spam history.
+  useEffect(() => {
+    if (!rel) return
+    const p = new URLSearchParams({ v: rel.version, path })
+    if (path === 'cli' && curTfm) { p.set('tfm', curTfm); p.set('os', curOs); p.set('arch', curArch) }
+    if (path === 'unity' && curMajor) { p.set('unity', curMajor); p.set('format', unityFormat) }
+    history.replaceState(null, '', `${location.pathname}?${p}${location.hash}`)
+  }, [rel, path, curTfm, curOs, curArch, curMajor, unityFormat])
 
   return (
     <main className="mx-auto max-w-3xl px-6 pb-24">
@@ -283,16 +298,17 @@ function ChipRow({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function DownloadCard({ asset }: { asset: ReleaseAsset }) {
-  const [copied, setCopied] = useState(false)
-  const copy = (text: string) => {
-    navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }).catch(() => {})
+  const [copied, setCopied] = useState<'sha' | 'link' | null>(null)
+  const copy = (what: 'sha' | 'link', text: string) => {
+    navigator.clipboard?.writeText(text).then(() => { setCopied(what); setTimeout(() => setCopied(null), 1500) }).catch(() => {})
   }
   const meta = asset.kind === 'cli'
     ? `${tfmLabel(asset.tfm ?? '')} · ${OS_LABEL[asset.os as Os]} · ${ARCH_LABEL[asset.arch as Arch]}`
     : `Unity ${asset.unityVersion} · ${asset.format === 'upm' ? 'UPM package' : '.unitypackage'}`
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-acid/30 bg-surface/40 p-6">
+    // id="download": shared links carry #download so the target lock lands on this exact build.
+    <div id="download" className="relative overflow-hidden rounded-2xl border border-acid/30 bg-surface/40 p-6">
       <Corners />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
@@ -308,8 +324,13 @@ function DownloadCard({ asset }: { asset: ReleaseAsset }) {
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 font-mono text-[11px]">
           <span className="text-faint">sha256</span>
           <span className="text-ink/80">{shortSha(asset.sha256)}</span>
-          <button onClick={() => copy(asset.sha256 as string)} className="text-faint transition-colors hover:text-acid">
-            {copied ? '✓ copied' : '⧉ copy'}
+          <button onClick={() => copy('sha', asset.sha256 as string)} className="text-faint transition-colors hover:text-acid">
+            {copied === 'sha' ? '✓ copied' : '⧉ copy'}
+          </button>
+          <button onClick={() => copy('link', `${location.origin}${location.pathname}${location.search}#download`)}
+            title="Copy a link to this exact build — version, runtime, OS and arch included"
+            className="text-faint transition-colors hover:text-acid">
+            {copied === 'link' ? '✓ copied' : '⧉ share'}
           </button>
           <VirusTotal asset={asset} />
         </div>
