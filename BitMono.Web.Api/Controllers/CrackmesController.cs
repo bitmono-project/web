@@ -416,7 +416,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         try
         {
             await Notifier.NotifyAsync(db, crackme.UploaderUserId, NotificationType.CommentOnYourCrackme,
-                $"New comment on '{crackme.Title}'", null, $"/challenge/{crackme.Slug}",
+                $"New comment on '{crackme.Title}'", null, $"/challenge/{crackme.Slug}#comment-{comment.Id}",
                 Guid.Parse(User.FindFirstValue("uid")!), crackme.Id, ct);
         }
         catch { }
@@ -833,7 +833,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         try
         {
             await Notifier.NotifyAsync(db, crackme.UploaderUserId, NotificationType.WriteupOnYourCrackme,
-                $"New writeup on '{crackme.Title}'", null, $"/challenge/{crackme.Slug}",
+                $"New writeup on '{crackme.Title}'", null, $"/challenge/{crackme.Slug}#writeup-{solution.Id}",
                 Guid.Parse(User.FindFirstValue("uid")!), crackme.Id, ct);
         }
         catch { }

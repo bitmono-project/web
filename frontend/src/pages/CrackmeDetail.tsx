@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   type CrackmeDetail as Detail, type CommentItem, type CommentEditItem, type MyRating, type WriteupItem, type ReactionSummary,
@@ -501,6 +501,26 @@ function Scale({ label, value, avg, count, disabled, onPick }: {
   )
 }
 
+// Date-as-permalink (GitHub-style): the real href gives native right/middle-click semantics;
+// a click also copies the absolute URL, and the hash navigation fires HashTarget's
+// target-lock brackets on the linked card — the flash shows exactly what was copied.
+function PermalinkDate({ anchor, children }: { anchor: string; children: ReactNode }) {
+  const [copied, setCopied] = useState(false)
+  const timer = useRef(0)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  const copy = () => {
+    navigator.clipboard?.writeText(`${location.origin}${location.pathname}#${anchor}`).catch(() => {})
+    setCopied(true)
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <Tooltip label={copied ? 'copied ✓' : 'copy permalink'}>
+      <a href={`#${anchor}`} onClick={copy} className="transition-colors hover:text-acid">{children}</a>
+    </Tooltip>
+  )
+}
+
 function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsLocked, turnstileSiteKey }: { slug: string; crackmeId: string; me: Me | null; commentReactionsEnabled: boolean; commentsLocked: boolean; turnstileSiteKey: string | null }) {
   const [comments, setComments] = useState<CommentItem[]>([])
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
@@ -579,7 +599,7 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
                 <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-faint">
                   <span>{cm.authorHandle
                     ? <Link to={`/user/${cm.authorHandle}`} className="transition-colors hover:text-acid">{cm.author}</Link>
-                    : cm.author} · {formatDate(cm.createdAt)}{cm.edited && <button onClick={() => showHistory(cm.id)} className="ml-1 transition-colors hover:text-acid">· edited</button>}{cm.isHidden && <span className="ml-1 text-orange-400">· hidden</span>}</span>
+                    : cm.author} · <PermalinkDate anchor={`comment-${cm.id}`}>{formatDate(cm.createdAt)}</PermalinkDate>{cm.edited && <button onClick={() => showHistory(cm.id)} className="ml-1 transition-colors hover:text-acid">· edited</button>}{cm.isHidden && <span className="ml-1 text-orange-400">· hidden</span>}</span>
                   <span className="flex gap-2">
                     {cm.mine && editing !== cm.id && <button onClick={() => startEdit(cm)} className="transition-colors hover:text-acid">edit</button>}
                     {cm.mine && <button onClick={() => setConfirmDel(cm.id)} className="transition-colors hover:text-red-400">delete</button>}
@@ -800,7 +820,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
           <div key={w.id} id={`writeup-${w.id}`} className={`rounded-lg border bg-surface/30 p-4 ${w.isAuthorPick ? 'border-acid/50' : 'border-line'}`}>
             <div className="font-mono text-[11px] text-faint">
               {w.isAuthorPick && <span className="mr-2 rounded border border-acid/50 px-1.5 py-px text-[10px] uppercase tracking-wider text-acid">★ intended solution</span>}
-              {w.title ?? 'Writeup'} · {w.author} · {formatDate(w.createdAt)}
+              {w.title ?? 'Writeup'} · {w.author} · <PermalinkDate anchor={`writeup-${w.id}`}>{formatDate(w.createdAt)}</PermalinkDate>
             </div>
             {wEditing === w.id ? (
               <div className="mt-2">
