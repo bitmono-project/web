@@ -33,7 +33,8 @@ export default function Ranks() {
               style={{
                 borderColor: here ? `${r.color}80` : `${r.color}26`,
                 background: `linear-gradient(100deg, ${r.color}0f, transparent 55%)`,
-              }}
+                '--hash-flash': r.color,
+              } as React.CSSProperties}
             >
               <img
                 src={`/rank-${r.slug}.png`}

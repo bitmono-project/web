@@ -97,11 +97,12 @@ button:not(:disabled) {
 
 @keyframes sweep { from { transform: translateX(-110%); } to { transform: translateX(110%); } }
 
-/* Deep-link flash — Layout's HashTarget adds .hash-target to the element the URL hash points at */
+/* Deep-link flash — Layout's HashTarget adds .hash-target to the element the URL hash points at.
+   Set --hash-flash on the element to tint the ring (defaults to acid). */
 @keyframes hash-target-flash {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  12%, 45% { box-shadow: 0 0 0 2px var(--color-acid), 0 0 40px color-mix(in srgb, var(--color-acid) 40%, transparent); }
-  28% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-acid) 30%, transparent), 0 0 12px transparent; }
+  12%, 45% { box-shadow: 0 0 0 2px var(--hash-flash, var(--color-acid)), 0 0 40px color-mix(in srgb, var(--hash-flash, var(--color-acid)) 40%, transparent); }
+  28% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--hash-flash, var(--color-acid)) 30%, transparent), 0 0 12px transparent; }
 }
 .hash-target {
   animation: hash-target-flash 2.4s ease-out;
