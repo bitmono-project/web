@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, Outlet } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { getAppVersion } from '../lib/version'
 import { isAdmin, isModerator, useAuth } from '../lib/auth'
 import { getUnreadCount } from '../lib/notifications'
@@ -11,11 +11,38 @@ export function Layout() {
   return (
     <div className="grain relative min-h-screen">
       <div className="bg-grid pointer-events-none absolute inset-x-0 top-0 -z-10 h-[720px]" />
+      <HashTarget />
       <Header />
       <Outlet />
       <Footer />
     </div>
   )
+}
+
+// Scrolls to and flashes the element the URL hash points at (e.g. /ranks#nop-sled-legend).
+// pushState navigation never updates CSS :target, so a .hash-target class stands in for it.
+function HashTarget() {
+  const { pathname, hash } = useLocation()
+  useEffect(() => {
+    if (!hash) return
+    const id = decodeURIComponent(hash.slice(1))
+    let timer: number
+    let tries = 0
+    const attempt = () => {
+      const el = document.getElementById(id)
+      if (!el) {
+        // ponytail: poll for anchors that render after a fetch (comments etc.); give up after ~6s
+        if (++tries < 40) timer = window.setTimeout(attempt, 150)
+        return
+      }
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('hash-target')
+      timer = window.setTimeout(() => el.classList.remove('hash-target'), 2600)
+    }
+    attempt()
+    return () => window.clearTimeout(timer)
+  }, [pathname, hash])
+  return null
 }
 
 function Header() {

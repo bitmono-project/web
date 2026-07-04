@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { RANKS, rankIndexForPoints, rankRange } from '../lib/ranks'
 import { useAuth } from '../lib/auth'
 import { getMyRank, type MyRank } from '../lib/crackmes'
@@ -8,16 +8,9 @@ import { useTitle } from '../lib/useTitle'
 export default function Ranks() {
   useTitle('Ranks — BitMono')
   const { me } = useAuth()
-  const { hash } = useLocation()
   const [mine, setMine] = useState<MyRank | null>(null)
 
   useEffect(() => { if (me) getMyRank().then(setMine) }, [me])
-
-  // Deep-link support: the ranks modal links here as /ranks#<slug>.
-  useEffect(() => {
-    if (!hash) return
-    document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [hash])
 
   const currentIdx = mine ? rankIndexForPoints(mine.points) : -1
 
