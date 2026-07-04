@@ -19,28 +19,43 @@ export function Layout() {
   )
 }
 
-// Scrolls to and flashes the element the URL hash points at (e.g. /ranks#nop-sled-legend).
+// Scrolls to and locks onto the element the URL hash points at (e.g. /ranks#nop-sled-legend).
 // pushState navigation never updates CSS :target, so a .hash-target class stands in for it.
+// The lock starts only once the smooth scroll settles — a flash mid-scroll plays to nobody.
 function HashTarget() {
   const { pathname, hash } = useLocation()
   useEffect(() => {
     if (!hash) return
     const id = decodeURIComponent(hash.slice(1))
-    let timer: number
+    const timers: number[] = []
+    let el: HTMLElement | null = null
+    let unlisten = () => {}
     let tries = 0
+    const lock = () => {
+      unlisten()
+      el!.classList.add('hash-target')
+      timers.push(window.setTimeout(() => el!.classList.remove('hash-target'), 2400))
+    }
     const attempt = () => {
-      const el = document.getElementById(id)
+      el = document.getElementById(id)
       if (!el) {
         // ponytail: poll for anchors that render after a fetch (comments etc.); give up after ~6s
-        if (++tries < 40) timer = window.setTimeout(attempt, 150)
+        if (++tries < 40) timers.push(window.setTimeout(attempt, 150))
         return
       }
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      el.classList.add('hash-target')
-      timer = window.setTimeout(() => el.classList.remove('hash-target'), 2600)
+      // scroll-idle debounce: each scroll event pushes the lock back; fires at 250ms if no scroll happens
+      let idle = window.setTimeout(lock, 250)
+      const onScroll = () => { window.clearTimeout(idle); idle = window.setTimeout(lock, 140) }
+      window.addEventListener('scroll', onScroll, { passive: true })
+      unlisten = () => { window.removeEventListener('scroll', onScroll); window.clearTimeout(idle) }
     }
     attempt()
-    return () => window.clearTimeout(timer)
+    return () => {
+      unlisten()
+      timers.forEach(clearTimeout)
+      el?.classList.remove('hash-target')
+    }
   }, [pathname, hash])
   return null
 }

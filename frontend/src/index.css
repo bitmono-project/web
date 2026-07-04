@@ -97,13 +97,43 @@ button:not(:disabled) {
 
 @keyframes sweep { from { transform: translateX(-110%); } to { transform: translateX(110%); } }
 
-/* Deep-link flash — Layout's HashTarget adds .hash-target to the element the URL hash points at.
-   Set --hash-flash on the element to tint the ring (defaults to acid). */
-@keyframes hash-target-flash {
-  0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  12%, 45% { box-shadow: 0 0 0 2px var(--hash-flash, var(--color-acid)), 0 0 40px color-mix(in srgb, var(--hash-flash, var(--color-acid)) 40%, transparent); }
-  28% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--hash-flash, var(--color-acid)) 30%, transparent), 0 0 12px transparent; }
-}
+/* Deep-link target lock — Layout's HashTarget adds .hash-target to the element the URL
+   hash points at once the scroll settles. HUD corner brackets snap in from outside,
+   hold fully lit, then release, over an interior wash in the target's own tint.
+   Set --hash-flash on the element to tint it (defaults to acid). */
 .hash-target {
-  animation: hash-target-flash 2.4s ease-out;
+  --hf: var(--hash-flash, var(--color-acid));
+  position: relative; /* anchors the bracket layer; transient while the class is on */
+}
+.hash-target::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  pointer-events: none;
+  background:
+    /* four corner brackets: a horizontal + vertical arm each */
+    linear-gradient(var(--hf), var(--hf)) top left / 22px 2px no-repeat,
+    linear-gradient(var(--hf), var(--hf)) top left / 2px 22px no-repeat,
+    linear-gradient(var(--hf), var(--hf)) top right / 22px 2px no-repeat,
+    linear-gradient(var(--hf), var(--hf)) top right / 2px 22px no-repeat,
+    linear-gradient(var(--hf), var(--hf)) bottom left / 22px 2px no-repeat,
+    linear-gradient(var(--hf), var(--hf)) bottom left / 2px 22px no-repeat,
+    linear-gradient(var(--hf), var(--hf)) bottom right / 22px 2px no-repeat,
+    linear-gradient(var(--hf), var(--hf)) bottom right / 2px 22px no-repeat,
+    /* interior wash — radial, so the square layer never fights rounded corners */
+    radial-gradient(120% 120% at 50% 50%,
+      color-mix(in srgb, var(--hf) 18%, transparent), transparent 75%) no-repeat;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--hf) 80%, transparent));
+  animation: hash-lock 2.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes hash-lock {
+  0%   { opacity: 0; transform: scale(1.12); }
+  10%  { opacity: 1; transform: scale(0.997); } /* snap in with a hair of overshoot */
+  16%  { transform: scale(1); }
+  70%  { opacity: 1; transform: scale(1); }     /* hold — visible well after the scroll lands */
+  100% { opacity: 0; transform: scale(1.05); }  /* release outward */
+}
+@media (prefers-reduced-motion: reduce) {
+  /* reduce ≠ remove: static brackets + wash still say which element is targeted */
+  .hash-target::after { animation: none; opacity: 1; transform: none; }
 }
