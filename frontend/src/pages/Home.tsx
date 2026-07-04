@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import { useEffect, useState } from 'react'
 import { ObfuscatePanel } from '../components/ObfuscatePanel'
 import { TextScramble } from '../components/TextScramble'
+import { ActivityFeed } from '../components/ActivityFeed'
 import { getEngineVersion } from '../lib/api'
 import { useT } from '../lib/i18n'
 
@@ -77,6 +78,8 @@ export default function Home() {
           </div>
         ))}
       </section>
+
+      <ActivityFeed />
     </main>
   )
 }

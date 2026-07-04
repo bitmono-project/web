@@ -20,7 +20,12 @@ public sealed record UserProfile(
     // so it can be fixed / unhidden.
     string? Bio,
     bool BioHidden,
-    string? BioHiddenReason);
+    string? BioHiddenReason,
+    // Author-side stats: totals across this user's published crackmes + how fast the community
+    // cracks them (median hours from publish to first solve; null until at least one is solved).
+    long AuthoredSolves,
+    long AuthoredDownloads,
+    double? MedianFirstSolveHours);
 
 public sealed record BioRequest(string? Bio);
 

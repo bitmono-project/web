@@ -78,6 +78,46 @@ export default function Download() {
     history.replaceState(null, '', `${location.pathname}?${p}${location.hash}`)
   }, [rel, path, curTfm, curOs, curArch, curMajor, unityFormat])
 
+  // Deep-link "assembly" effect: when arriving on a shared link (selection in the query), sweep a border
+  // trace around each chosen selector chip in order, then land the normal target-lock on the file card —
+  // so the page visibly reconstructs the choice box by box. Runs once, only for shared links.
+  const cascadeRan = useRef(false)
+  useEffect(() => {
+    if (loading || cascadeRan.current) return
+    if (!(init.tfm || init.os || init.arch || init.unity)) return // bare visit → no theatrics
+    const card = document.getElementById('download')
+    if (!card) return
+    cascadeRan.current = true
+
+    const chips = [1, 2, 3]
+      .map((n) => document.querySelector<HTMLElement>(`[data-trace="${n}"]`))
+      .filter((el): el is HTMLElement => el != null)
+    // If the URL literally carries #download, Layout's generic lock would fire immediately and jump the
+    // queue — pull the id while the chips trace, restore it so Layout locks the card last.
+    const viaHash = decodeURIComponent(window.location.hash) === '#download'
+    if (viaHash) card.removeAttribute('id')
+
+    const timers: number[] = []
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    chips.forEach((el, i) => {
+      timers.push(window.setTimeout(() => {
+        el.classList.add('trace-box')
+        timers.push(window.setTimeout(() => el.classList.remove('trace-box'), 760))
+      }, 260 + i * 360))
+    })
+    timers.push(window.setTimeout(() => {
+      if (viaHash) {
+        card.setAttribute('id', 'download') // Layout's poll now finds it and lands the lock
+      } else {
+        card.classList.add('hash-target')
+        timers.push(window.setTimeout(() => card.classList.remove('hash-target'), 2400))
+      }
+    }, 260 + chips.length * 360 + 140))
+
+    return () => timers.forEach(clearTimeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
+
   return (
     <main className="mx-auto max-w-3xl px-6 pb-24">
       {/* z-30: every `.rise` section below settles at transform:translateY(0) — a permanent stacking context —
@@ -132,7 +172,7 @@ export default function Download() {
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   {cliTfms.map((id) => (
-                    <Chip key={id} on={id === curTfm} onClick={() => setTfm(id)} title={tfmLabel(id)}>
+                    <Chip key={id} on={id === curTfm} onClick={() => setTfm(id)} title={tfmLabel(id)} trace={1}>
                       {tfmChip(id)}{id === RECOMMENDED_TFM ? <span className="ml-1 text-[9px] text-acid/80">LTS</span> : null}
                     </Chip>
                   ))}
@@ -148,10 +188,10 @@ export default function Download() {
               ) : (
                 <div className="mt-4 space-y-2.5">
                   <ChipRow label="OS">
-                    {cliOss.map((o) => <Chip key={o} on={o === curOs} onClick={() => setOs(o)}>{OS_LABEL[o]}</Chip>)}
+                    {cliOss.map((o) => <Chip key={o} on={o === curOs} onClick={() => setOs(o)} trace={2}>{OS_LABEL[o]}</Chip>)}
                   </ChipRow>
                   <ChipRow label="Arch">
-                    {cliArchs.map((a) => <Chip key={a} on={a === curArch} onClick={() => setArch(a)}>{ARCH_LABEL[a]}</Chip>)}
+                    {cliArchs.map((a) => <Chip key={a} on={a === curArch} onClick={() => setArch(a)} trace={3}>{ARCH_LABEL[a]}</Chip>)}
                   </ChipRow>
                 </div>
               ))}
@@ -192,15 +232,15 @@ export default function Download() {
                   <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-faint">Unity version</div>
                   <div className="flex flex-wrap items-center gap-2">
                     {unityMajors.map((m) => (
-                      <Chip key={m} on={m === curMajor} onClick={() => setUnityMajor(m)}>{m === '6000' ? 'Unity 6' : m}</Chip>
+                      <Chip key={m} on={m === curMajor} onClick={() => setUnityMajor(m)} trace={1}>{m === '6000' ? 'Unity 6' : m}</Chip>
                     ))}
                   </div>
                 </div>
                 <div>
                   <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-faint">Format</div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Chip on={unityFormat === 'unitypackage'} onClick={() => setUnityFormat('unitypackage')} title="Double-click to import into the editor">.unitypackage</Chip>
-                    <Chip on={unityFormat === 'upm'} onClick={() => setUnityFormat('upm')} title="Add via the Package Manager (tarball)">UPM · .tgz</Chip>
+                    <Chip on={unityFormat === 'unitypackage'} onClick={() => setUnityFormat('unitypackage')} title="Double-click to import into the editor" trace={2}>.unitypackage</Chip>
+                    <Chip on={unityFormat === 'upm'} onClick={() => setUnityFormat('upm')} title="Add via the Package Manager (tarball)" trace={2}>UPM · .tgz</Chip>
                   </div>
                 </div>
                 {unityAsset
@@ -280,9 +320,11 @@ function PathCard({ on, onClick, icon, title, sub }: { on: boolean; onClick: () 
   )
 }
 
-function Chip({ on, onClick, title, children }: { on: boolean; onClick: () => void; title?: string; children: ReactNode }) {
+// trace: when this chip is the selected one, tag it data-trace={n} so the deep-link cascade can sweep
+// its border in order (1 runtime → 2 os → 3 arch).
+function Chip({ on, onClick, title, trace, children }: { on: boolean; onClick: () => void; title?: string; trace?: number; children: ReactNode }) {
   const btn = (
-    <button onClick={onClick}
+    <button onClick={onClick} data-trace={on && trace ? trace : undefined}
       className={`inline-flex items-center rounded-full border px-3 py-1 font-mono text-xs transition-colors ${on ? 'border-acid text-acid' : 'border-line text-muted hover:text-ink'}`}>
       {children}
     </button>

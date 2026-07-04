@@ -1,15 +1,25 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { type LeaderboardEntry, type MyRank, getLeaderboard, getMyRank } from '../lib/crackmes'
+import { type LeaderboardEntry, type MyRank, type SeasonMeta, getLeaderboard, getMyRank, getSeason } from '../lib/crackmes'
 import { RanksDialog } from '../components/RanksDialog'
 import { useTitle } from '../lib/useTitle'
 
 const SCOPES = [
   { value: '', label: 'Overall' },
+  { value: 'season', label: 'Season' },
   { value: 'dotnet', label: '.NET' },
   { value: 'monthly', label: 'This month' },
 ]
+
+// "3d 4h" until the season closes — the urgency clock, HTB-style.
+function untilLabel(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now()
+  if (ms <= 0) return 'closing'
+  const h = Math.floor(ms / 3_600_000)
+  const d = Math.floor(h / 24)
+  return d > 0 ? `${d}d ${h % 24}h` : `${h}h`
+}
 
 const medal = (rank: number): string => (rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}`)
 
@@ -20,11 +30,14 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true)
   const [mine, setMine] = useState<MyRank | null>(null)
   const [ranksOpen, setRanksOpen] = useState(false)
+  const [season, setSeason] = useState<SeasonMeta | null>(null)
 
   useEffect(() => {
     setLoading(true)
     getLeaderboard(scope).then((r) => { setItems(r.items); setLoading(false) })
   }, [scope])
+
+  useEffect(() => { getSeason().then(setSeason) }, [])
 
   useEffect(() => {
     if (me) getMyRank().then(setMine)
@@ -62,6 +75,14 @@ export default function Leaderboard() {
           </button>
         ))}
       </div>
+
+      {scope === 'season' && season && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-acid/30 bg-acid/5 p-4 font-mono text-[13px]">
+          <span className="font-bold text-acid">Season {season.number}: {season.name}</span>
+          <span className="text-faint">everyone starts at zero — 13-week sprint</span>
+          <span className="ml-auto text-muted">ends in {untilLabel(season.endsAt)}</span>
+        </div>
+      )}
 
       {loading ? (
         <p className="mt-10 font-mono text-sm text-muted">loading<span className="caret">_</span></p>

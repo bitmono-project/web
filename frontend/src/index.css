@@ -138,6 +138,39 @@ button:not(:disabled) {
   .hash-target::after { animation: none; opacity: 1; transform: none; }
 }
 
+/* Border-trace pulse — a bright acid arc sweeps once around a pill's outline. Download.tsx staggers
+   .trace-box onto each deep-linked selector chip (runtime → os → arch) before the final .hash-target
+   lock lands on the file card, so the shared link "assembles" the choice box by box. */
+@property --trace-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+.trace-box { position: relative; }
+.trace-box::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px; /* ring thickness — masked to just the border band */
+  background: conic-gradient(from var(--trace-angle),
+    transparent 0deg 280deg,
+    color-mix(in srgb, var(--color-acid) 40%, transparent) 320deg,
+    var(--color-acid) 350deg 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--color-acid) 70%, transparent));
+  animation: trace-run 0.72s linear both;
+}
+@keyframes trace-run {
+  0%   { --trace-angle: 0deg;   opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { --trace-angle: 360deg; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trace-box::after { animation: none; opacity: 1; --trace-angle: 360deg; }
+}
+
 /* Long-form article styling for rendered blog markdown — used by the client (BlogPost.tsx) and the
    server-prerendered body (seo.mjs blogPostBody), so both renders look identical. */
 .blog-prose {

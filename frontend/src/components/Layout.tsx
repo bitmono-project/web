@@ -65,12 +65,12 @@ function Header() {
   const { me, loading, signOut } = useAuth()
   const t = useT()
   return (
-    <header className="mx-auto flex max-w-6xl flex-col items-start gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
-      <Link to="/" className="flex items-center gap-3">
+    <header className="mx-auto flex max-w-6xl flex-col items-start gap-3 px-6 py-6 sm:flex-row sm:justify-between sm:gap-4">
+      <Link to="/" className="flex shrink-0 items-center gap-3 sm:h-8">
         <img src="/mark.png" alt="BitMono" className="h-8 w-8" />
         <span className="font-mono text-sm font-bold tracking-tight">bitmono</span>
       </Link>
-      <nav className="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[13px] text-muted sm:gap-x-5">
+      <nav className="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[13px] text-muted sm:justify-end sm:gap-x-4">
         <Link to="/#obfuscate" className="hidden transition-colors hover:text-ink sm:inline">{t('nav.obfuscate')}</Link>
         <Link to="/download" className="transition-colors hover:text-ink">{t('nav.download')}</Link>
         <Link to="/crackmes" className="transition-colors hover:text-ink">{t('nav.crackmes')}</Link>

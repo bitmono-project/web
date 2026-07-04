@@ -14,6 +14,9 @@ public static class BadgeService
     public const string Scenarist = "scenarist";
     public const string Professor = "professor";
 
+    // Per-season podium badge, minted on the fly by SeasonAwarder (not in the seeded catalogue).
+    public static string SeasonPodium(int season) => $"season_{season}_podium";
+
     public static async Task TryAwardAsync(CrackmesDbContext db, Guid userId, string code, CancellationToken ct)
     {
         if (await db.UserBadges.AsNoTracking().AnyAsync(b => b.UserId == userId && b.BadgeCode == code, ct))

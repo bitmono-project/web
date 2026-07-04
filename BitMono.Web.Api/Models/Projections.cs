@@ -5,6 +5,6 @@ public sealed record ReactionRow(string Emoji, Guid UserId);
 
 public sealed record CommentReactionRow(Guid TargetId, string Emoji, Guid UserId);
 
-public sealed record CommentRow(Guid Id, string? Author, Guid? AuthorUserId, string Body, bool IsSpoiler, bool IsDeleted, bool IsHidden, DateTime CreatedAt, DateTime UpdatedAt);
+public sealed record CommentRow(Guid Id, Guid? ParentCommentId, string? Author, Guid? AuthorUserId, string Body, bool IsSpoiler, bool IsDeleted, bool IsHidden, DateTime CreatedAt, DateTime UpdatedAt);
 
 public sealed record CrackmeReactionTarget(Guid Id, bool ReactionsEnabled);

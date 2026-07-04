@@ -364,7 +364,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var rows = await db.Comments.AsNoTracking()
             .Where(c => c.CrackmeId == id && (isMod || !c.IsHidden))
             .OrderBy(c => c.CreatedAt)
-            .Select(c => new CommentRow(c.Id, c.AnonymousHandle, c.AuthorUserId, c.Body, c.IsSpoiler, c.IsDeleted, c.IsHidden, c.CreatedAt, c.UpdatedAt))
+            .Select(c => new CommentRow(c.Id, c.ParentCommentId, c.AnonymousHandle, c.AuthorUserId, c.Body, c.IsSpoiler, c.IsDeleted, c.IsHidden, c.CreatedAt, c.UpdatedAt))
             .ToListAsync(ct);
 
         var ids = rows.Select(r => r.Id).ToList();
@@ -388,7 +388,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
                 : rs.Where(x => x.UserId == uid).Select(x => x.Emoji).ToList();
             var handle = r.AuthorUserId is { } au && handles.TryGetValue(au, out var h) ? h : null;
             var mine = uid is not null && r.AuthorUserId == uid;
-            return new CommentItem(r.Id, r.Author ?? AppConstants.AnonymousHandle, handle,
+            return new CommentItem(r.Id, r.ParentCommentId, r.Author ?? AppConstants.AnonymousHandle, handle,
                 r.IsDeleted ? "" : r.Body, !r.IsDeleted && r.IsSpoiler, r.IsDeleted, r.IsHidden, r.UpdatedAt != r.CreatedAt, mine,
                 r.CreatedAt, counts, myReactions);
         }).ToList();
@@ -416,12 +416,37 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (crackme.CommentsLocked)
             return StatusCode(StatusCodes.Status423Locked, "Comments are locked on this crackme.");
 
+        // Threads are one level deep: a reply to a reply attaches to the top-level parent, and the parent
+        // must live on this same crackme. parentAuthor is notified below (unless it's a self-reply).
+        Guid? parentId = null, parentAuthor = null;
+        if (req.ParentCommentId is { } reqParent)
+        {
+            var parent = await db.Comments.AsNoTracking()
+                .Where(x => x.Id == reqParent && x.CrackmeId == crackme.Id && !x.IsDeleted)
+                .Select(x => new { x.Id, x.ParentCommentId, x.AuthorUserId })
+                .FirstOrDefaultAsync(ct);
+            if (parent is null)
+                return BadRequest("The comment you're replying to doesn't exist.");
+            if (parent.ParentCommentId is { } root)
+            {
+                parentId = root;
+                parentAuthor = await db.Comments.AsNoTracking().Where(x => x.Id == root).Select(x => x.AuthorUserId).FirstOrDefaultAsync(ct);
+            }
+            else
+            {
+                parentId = parent.Id;
+                parentAuthor = parent.AuthorUserId;
+            }
+        }
+
         var now = DateTime.UtcNow;
+        var uid = User.UserId();
         var comment = new Comment
         {
             Id = Guid.NewGuid(),
             CrackmeId = crackme.Id,
-            AuthorUserId = User.UserId(),
+            ParentCommentId = parentId,
+            AuthorUserId = uid,
             AnonymousHandle = User.Identity?.Name ?? AppConstants.AnonymousHandle,
             Body = body,
             IsSpoiler = req.IsSpoiler,
@@ -430,19 +455,24 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         };
         db.Comments.Add(comment);
         await db.SaveChangesAsync(ct);
+        var link = $"/challenge/{crackme.Slug}#comment-{comment.Id}";
         try
         {
-            await Notifier.NotifyAsync(db, crackme.UploaderUserId, NotificationType.CommentOnYourCrackme,
-                $"New comment on '{crackme.Title}'", null, $"/challenge/{crackme.Slug}#comment-{comment.Id}",
-                User.UserId(), crackme.Id, ct);
-            // @mentions ping their targets too; the owner already got the comment notification above.
-            await Mentions.NotifyAsync(db, body, comment.AnonymousHandle!, comment.AuthorUserId,
-                $"/challenge/{crackme.Slug}#comment-{comment.Id}", crackme.Id, [crackme.UploaderUserId], ct);
+            // A reply pings the parent's author; a top-level comment pings the crackme owner. Both, plus the
+            // mention pass, dedupe against the actor and each other so nobody gets two pings for one comment.
+            if (parentId is not null)
+                await Notifier.NotifyAsync(db, parentAuthor, NotificationType.CommentReply,
+                    $"{comment.AnonymousHandle} replied to your comment", null, link, uid, crackme.Id, ct);
+            else
+                await Notifier.NotifyAsync(db, crackme.UploaderUserId, NotificationType.CommentOnYourCrackme,
+                    $"New comment on '{crackme.Title}'", null, link, uid, crackme.Id, ct);
+            await Mentions.NotifyAsync(db, body, comment.AnonymousHandle!, uid, link, crackme.Id,
+                [crackme.UploaderUserId, parentAuthor], ct);
         }
         catch { }
         var authorHandle = await db.Users.AsNoTracking()
             .Where(u => u.Id == comment.AuthorUserId).Select(u => u.Handle).FirstOrDefaultAsync(ct);
-        return Ok(new CommentItem(comment.Id, comment.AnonymousHandle!, authorHandle, comment.Body, comment.IsSpoiler, false, false, false, true, comment.CreatedAt,
+        return Ok(new CommentItem(comment.Id, parentId, comment.AnonymousHandle!, authorHandle, comment.Body, comment.IsSpoiler, false, false, false, true, comment.CreatedAt,
             new Dictionary<string, int>(), []));
     }
 
@@ -628,6 +658,127 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         c.ReactionsEnabled = req.ReactionsEnabled;
         c.CommentReactionsEnabled = req.CommentReactionsEnabled;
         c.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    // --- hints: author-written, point-costed. Locked bodies are hidden until the viewer unlocks (pays a
+    // points penalty at solve time) — or has already solved it, owns it, or is staff (then free). ---
+
+    [HttpGet("{slug}/hints")]
+    public async Task<IActionResult> Hints(string slug, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Crackmes.AsNoTracking().Where(Public)
+            .Where(x => x.Slug == slug).Select(x => new { x.Id, x.UploaderUserId }).FirstOrDefaultAsync(ct);
+        if (c is null)
+            return NotFound();
+
+        var hints = await db.CrackmeHints.AsNoTracking()
+            .Where(h => h.CrackmeId == c.Id).OrderBy(h => h.Order)
+            .Select(h => new { h.Id, h.Order, h.CostPercent, h.Body })
+            .ToListAsync(ct);
+        if (hints.Count == 0)
+            return Ok(Array.Empty<HintItem>());
+
+        var uid = User.UserIdOrNull();
+        var isStaff = User.IsInRole(nameof(UserRole.Moderator)) || User.IsInRole(nameof(UserRole.Admin));
+        var isOwner = uid is not null && uid == c.UploaderUserId;
+        var solved = uid is not null && await db.Solves.AsNoTracking().AnyAsync(x => x.UserId == uid && x.CrackmeId == c.Id, ct);
+        var freeReveal = isOwner || isStaff || solved;
+
+        var unlocked = uid is null || freeReveal
+            ? new HashSet<Guid>()
+            : (await db.HintUnlocks.AsNoTracking().Where(u => u.UserId == uid && u.CrackmeId == c.Id).Select(u => u.HintId).ToListAsync(ct)).ToHashSet();
+
+        var items = hints.Select(h =>
+        {
+            var open = freeReveal || unlocked.Contains(h.Id);
+            return new HintItem(h.Id, h.Order, h.CostPercent, open, open ? h.Body : null);
+        }).ToList();
+        return Ok(items);
+    }
+
+    [HttpPost("{slug}/hints/{id:guid}/unlock")]
+    [Authorize]
+    [EnableRateLimiting("comment")]
+    public async Task<IActionResult> UnlockHint(string slug, Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Crackmes.AsNoTracking().Where(Public)
+            .Where(x => x.Slug == slug).Select(x => new { x.Id, x.UploaderUserId }).FirstOrDefaultAsync(ct);
+        if (c is null)
+            return NotFound();
+
+        var hint = await db.CrackmeHints.AsNoTracking()
+            .Where(h => h.Id == id && h.CrackmeId == c.Id).Select(h => new { h.Body, h.CostPercent }).FirstOrDefaultAsync(ct);
+        if (hint is null)
+            return NotFound();
+
+        var uid = User.UserId();
+        if (uid == c.UploaderUserId)
+            return Ok(new HintUnlockResult(hint.Body, 0)); // author reads their own hints free
+
+        // Already solved → free, no charge recorded (the solve's points are already locked).
+        var solved = await db.Solves.AsNoTracking().AnyAsync(x => x.UserId == uid && x.CrackmeId == c.Id, ct);
+        if (!solved && !await db.HintUnlocks.AsNoTracking().AnyAsync(u => u.UserId == uid && u.HintId == id, ct))
+        {
+            db.HintUnlocks.Add(new HintUnlock
+            {
+                Id = Guid.NewGuid(), HintId = id, CrackmeId = c.Id, UserId = uid,
+                CostPercent = hint.CostPercent, UnlockedAt = DateTime.UtcNow,
+            });
+            try { await db.SaveChangesAsync(ct); }
+            catch (DbUpdateException) { /* raced the unique index — already unlocked, fine */ }
+        }
+        return Ok(new HintUnlockResult(hint.Body, solved ? 0 : hint.CostPercent));
+    }
+
+    [HttpPost("{slug}/hints")]
+    [Authorize]
+    public async Task<IActionResult> AddHint(string slug, [FromBody] HintCreateRequest req, CancellationToken ct)
+    {
+        var body = req.Body?.Trim();
+        if (string.IsNullOrEmpty(body))
+            return BadRequest("Hint can't be empty.");
+        if (body.Length > 2000)
+            body = body[..2000];
+        var cost = Math.Clamp(req.CostPercent, 5, 75);
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var c = await db.Crackmes.AsNoTracking().Where(x => x.Slug == slug)
+            .Select(x => new { x.Id, x.UploaderUserId }).FirstOrDefaultAsync(ct);
+        if (c is null)
+            return NotFound();
+        if (c.UploaderUserId != User.UserIdOrNull() && !User.IsInRole(nameof(UserRole.Admin)))
+            return Forbid();
+
+        var order = await db.CrackmeHints.AsNoTracking().Where(h => h.CrackmeId == c.Id).CountAsync(ct);
+        var hint = new CrackmeHint
+        {
+            Id = Guid.NewGuid(), CrackmeId = c.Id, Order = order,
+            Body = body, CostPercent = cost, CreatedAt = DateTime.UtcNow,
+        };
+        db.CrackmeHints.Add(hint);
+        await db.SaveChangesAsync(ct);
+        return Ok(new HintItem(hint.Id, hint.Order, hint.CostPercent, true, hint.Body));
+    }
+
+    [HttpDelete("{slug}/hints/{id:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteHint(string slug, Guid id, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var hint = await db.CrackmeHints.Include(h => h.Crackme).FirstOrDefaultAsync(h => h.Id == id && h.Crackme.Slug == slug, ct);
+        if (hint is null)
+            return NotFound();
+        if (hint.Crackme.UploaderUserId != User.UserIdOrNull() && !User.IsInRole(nameof(UserRole.Admin)))
+            return Forbid();
+        db.CrackmeHints.Remove(hint);
         await db.SaveChangesAsync(ct);
         return NoContent();
     }

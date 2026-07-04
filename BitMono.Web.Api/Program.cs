@@ -61,6 +61,7 @@ builder.Services.AddHangfireServer(options =>
 builder.Services.AddSingleton<FileStore>();
 builder.Services.AddScoped<ObfuscateJob>();
 builder.Services.AddScoped<CleanupJob>();
+builder.Services.AddScoped<SeasonAwarder>();
 
 var obfuscationUrl = builder.Configuration["Obfuscation:Url"] ?? "http://localhost:8743";
 #pragma warning disable EXTEXP0001
@@ -150,6 +151,8 @@ app.MapControllers();
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     RecurringJob.AddOrUpdate<CleanupJob>("cleanup", j => j.RunAsync(CancellationToken.None), Cron.Hourly);
+    // Settle ended seasons (mint + award podium badges). Daily is plenty — a season ends every 13 weeks.
+    RecurringJob.AddOrUpdate<SeasonAwarder>("season-awarder", j => j.RunAsync(CancellationToken.None), Cron.Daily);
     // Work through the release's assets slowly — the free VT tier is only 500 req/day, so one asset every
     // 10 min (~150 req/day) stays well within it. No-ops without a key.
     RecurringJob.AddOrUpdate<VirusTotalScanner>("vtscan", s => s.RunAsync(CancellationToken.None), "*/10 * * * *");

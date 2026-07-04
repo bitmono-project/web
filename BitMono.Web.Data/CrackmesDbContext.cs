@@ -13,6 +13,8 @@ public class CrackmesDbContext(DbContextOptions<CrackmesDbContext> options) : Db
     public DbSet<SolutionVote> SolutionVotes => Set<SolutionVote>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<CommentEdit> CommentEdits => Set<CommentEdit>();
+    public DbSet<CrackmeHint> CrackmeHints => Set<CrackmeHint>();
+    public DbSet<HintUnlock> HintUnlocks => Set<HintUnlock>();
     public DbSet<Rating> Ratings => Set<Rating>();
     public DbSet<Reaction> Reactions => Set<Reaction>();
     public DbSet<Solve> Solves => Set<Solve>();

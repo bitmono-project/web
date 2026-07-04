@@ -11,6 +11,7 @@ import { isModerator, useAuth, type Me } from '../lib/auth'
 import { Tooltip } from '../components/Tooltip'
 import { MentionText } from '../components/MentionText'
 import { PromptDialog } from '../components/PromptDialog'
+import { StaffTag } from '../components/StaffTag'
 import { useTitle } from '../lib/useTitle'
 
 export default function Profile() {
@@ -101,6 +102,17 @@ export default function Profile() {
         </div>
       )}
 
+      {profile.authored > 0 && (
+        <div className="mt-10">
+          <div className="mb-3 font-mono text-[11px] uppercase tracking-wider text-faint">As an author</div>
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard label="Solves earned" value={profile.authoredSolves.toLocaleString()} />
+            <StatCard label="Downloads" value={profile.authoredDownloads.toLocaleString()} />
+            <StatCard label="Median time to crack" value={formatCrackTime(profile.medianFirstSolveHours)} />
+          </div>
+        </div>
+      )}
+
       <h2 className="mb-3 mt-12 font-display text-2xl font-bold text-ink">Authored crackmes</h2>
       {crackmes.length === 0 ? (
         <p className="font-mono text-[13px] text-faint">None yet.</p>
@@ -185,12 +197,15 @@ function BioSection({ profile, me, isOwn, onPatch }: {
           {profile.bio
             ? <p className={`whitespace-pre-wrap font-mono text-[13px] leading-relaxed ${profile.bioHidden ? 'text-faint opacity-70' : 'text-ink/90'}`}><MentionText text={profile.bio} /></p>
             : <p className="font-mono text-[13px] italic text-faint">no bio yet.</p>}
-          <div className="mt-1.5 flex gap-3 font-mono text-[12px]">
+          <div className="mt-1.5 flex flex-wrap items-center gap-3 font-mono text-[12px]">
             {isOwn && <button onClick={startEdit} className="text-faint transition-colors hover:text-acid">✎ {profile.bio ? 'edit bio' : 'add a bio'}</button>}
             {staff && !isOwn && profile.bio && (
-              profile.bioHidden
-                ? <button onClick={() => toggleHide(null)} className="text-faint transition-colors hover:text-acid">unhide bio</button>
-                : <button onClick={() => setHidePrompt(true)} className="text-faint transition-colors hover:text-red-400">hide bio</button>
+              <span className="inline-flex items-center gap-1.5">
+                <StaffTag label="mod" />
+                {profile.bioHidden
+                  ? <button onClick={() => toggleHide(null)} className="text-faint transition-colors hover:text-acid">unhide bio</button>
+                  : <button onClick={() => setHidePrompt(true)} className="text-faint transition-colors hover:text-red-400">hide bio</button>}
+              </span>
             )}
           </div>
         </>
@@ -250,6 +265,14 @@ function ReportProfileControl({ handle }: { handle: string }) {
       )}
     </div>
   )
+}
+
+// Median publish→first-solve, as a human span. "—" until at least one of their crackmes is cracked.
+function formatCrackTime(hours: number | null): string {
+  if (hours == null) return '—'
+  if (hours < 1) return `${Math.round(hours * 60)}m`
+  if (hours < 48) return `${Math.round(hours)}h`
+  return `${Math.round(hours / 24)}d`
 }
 
 function badgeClass(rarity: string): string {

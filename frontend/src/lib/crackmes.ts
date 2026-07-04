@@ -261,6 +261,14 @@ export async function getLeaderboard(scope: string, page = 1): Promise<Leaderboa
   return (await res.json()) as LeaderboardResponse
 }
 
+// Current 13-week season (name + window), for the leaderboard's season scope + countdown banner.
+export interface SeasonMeta { number: number; name: string; startsAt: string; endsAt: string; current: number }
+
+export async function getSeason(): Promise<SeasonMeta | null> {
+  const res = await fetch('/api/progression/season')
+  return res.ok ? ((await res.json()) as SeasonMeta) : null
+}
+
 export interface MyRank {
   points: number
   solves: number
@@ -303,6 +311,9 @@ export interface UserProfile {
   bio: string | null
   bioHidden: boolean
   bioHiddenReason: string | null
+  authoredSolves: number
+  authoredDownloads: number
+  medianFirstSolveHours: number | null
 }
 
 export interface ProfileCrackme {
@@ -346,6 +357,37 @@ export async function toggleBioHide(userId: string, reason: string | null): Prom
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
   })
   return res.ok ? ((await res.json()) as { bioHidden: boolean }).bioHidden : null
+}
+
+// --- hints (author-written, point-costed) ---
+
+export interface HintItem {
+  id: string
+  order: number
+  costPercent: number
+  unlocked: boolean
+  body: string | null // null while locked (unless you own/solved it or are staff)
+}
+
+export async function getHints(slug: string): Promise<HintItem[]> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/hints`)
+  return res.ok ? ((await res.json()) as HintItem[]) : []
+}
+
+export async function unlockHint(slug: string, id: string): Promise<{ body: string; costPercent: number } | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/hints/${id}/unlock`, { method: 'POST' })
+  return res.ok ? ((await res.json()) as { body: string; costPercent: number }) : null
+}
+
+export async function addHint(slug: string, body: string, costPercent: number): Promise<HintItem | null> {
+  const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/hints`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body, costPercent }),
+  })
+  return res.ok ? ((await res.json()) as HintItem) : null
+}
+
+export async function deleteHint(slug: string, id: string): Promise<boolean> {
+  return (await fetch(`/api/crackmes/${encodeURIComponent(slug)}/hints/${id}`, { method: 'DELETE' })).ok
 }
 
 // --- moderation (moderator/admin only) ---
@@ -494,6 +536,7 @@ export async function getAdminUsers(q: string): Promise<AdminUserRow[]> {
 
 export interface CommentItem {
   id: string
+  parentCommentId: string | null
   author: string
   authorHandle: string | null
   body: string
@@ -566,11 +609,11 @@ export async function getComments(slug: string): Promise<CommentItem[]> {
   return (await res.json()) as CommentItem[]
 }
 
-export async function postComment(slug: string, body: string, isSpoiler: boolean, captchaToken?: string | null): Promise<CommentItem | null> {
+export async function postComment(slug: string, body: string, isSpoiler: boolean, captchaToken?: string | null, parentCommentId?: string | null): Promise<CommentItem | null> {
   const res = await fetch(`/api/crackmes/${encodeURIComponent(slug)}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ body, isSpoiler, captchaToken }),
+    body: JSON.stringify({ body, isSpoiler, captchaToken, parentCommentId: parentCommentId ?? null }),
   })
   if (!res.ok) return null
   return (await res.json()) as CommentItem

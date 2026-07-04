@@ -42,7 +42,7 @@ public enum NotificationType
     SubmissionApproved, SubmissionRejected, TakenDown,
     CommentOnYourCrackme, WriteupOnYourCrackme,
     SolvedYourCrackme, FirstBlood, BadgeAwarded,
-    Mentioned, ProfileBioHidden,
+    Mentioned, ProfileBioHidden, CommentReply,
 }
 
 // Badge tiers, for the rarity tint on the shelf. Append-only — stored as int.

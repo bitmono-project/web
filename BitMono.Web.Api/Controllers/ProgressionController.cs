@@ -2,6 +2,7 @@ using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Progression;
 using BitMono.Web.Data;
+using BitMono.Web.Data.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,23 +16,34 @@ public sealed class ProgressionController(IServiceScopeFactory scopeFactory) : C
     private const int PageSize = 50;
     private const string UnknownUser = "unknown"; // defensive fallback if a ranked user row is missing
 
-    // scope: overall (default, uses the User.Points cache) | monthly (last 30 days) | dotnet (.NET-family crackmes)
+    // scope: Overall (default, uses the User.Points cache) | Monthly (last 30 days) |
+    //        DotNet (.NET-family crackmes) | Season (current 13-week season, or ?season=N for a past one)
     [HttpGet("leaderboard")]
-    public async Task<LeaderboardResponse> Leaderboard([FromQuery] string? scope, [FromQuery] int page = 1, CancellationToken ct = default)
+    public async Task<LeaderboardResponse> Leaderboard([FromQuery] string? scope, [FromQuery] int page = 1, [FromQuery] int? season = null, CancellationToken ct = default)
     {
         await using var s = scopeFactory.CreateAsyncScope();
         var db = s.ServiceProvider.GetRequiredService<CrackmesDbContext>();
         page = Math.Max(1, page);
+        // Forgiving parse (query strings are lower-case: "dotnet" → DotNet); unknown/blank → Overall.
+        Enum.TryParse<LeaderboardScope>(scope, ignoreCase: true, out var sc);
 
         List<(Guid UserId, int Points, int Solves)> ranked;
         int total;
 
-        if (scope is "monthly" or "dotnet")
+        if (sc is LeaderboardScope.Monthly or LeaderboardScope.DotNet or LeaderboardScope.Season)
         {
             var src = db.Solves.AsNoTracking();
-            var filtered = scope == "monthly"
-                ? src.Where(x => x.SolvedAt >= DateTime.UtcNow.AddDays(-30))
-                : src.Where(x => db.Crackmes.Any(c => c.Id == x.CrackmeId &&
+            IQueryable<Solve> filtered;
+            if (sc == LeaderboardScope.Monthly)
+                filtered = src.Where(x => x.SolvedAt >= DateTime.UtcNow.AddDays(-30));
+            else if (sc == LeaderboardScope.Season)
+            {
+                var n = season is > 0 ? season.Value : Seasons.Current;
+                var (start, end) = (Seasons.StartOf(n), Seasons.EndOf(n));
+                filtered = src.Where(x => x.SolvedAt >= start && x.SolvedAt < end);
+            }
+            else
+                filtered = src.Where(x => db.Crackmes.Any(c => c.Id == x.CrackmeId &&
                     (c.TargetPlatform == TargetPlatform.DotNet || c.TargetPlatform == TargetPlatform.Mono || c.TargetPlatform == TargetPlatform.NetFramework)));
 
             var agg = await filtered
@@ -70,6 +82,15 @@ public sealed class ProgressionController(IServiceScopeFactory scopeFactory) : C
         }).ToList();
 
         return new LeaderboardResponse(items, total, page, PageSize);
+    }
+
+    // Current season descriptor for the leaderboard picker + countdown banner.
+    [HttpGet("season")]
+    public SeasonMeta Season()
+    {
+        var n = Seasons.Current;
+        var info = Seasons.InfoOf(n);
+        return new SeasonMeta(n, info.Name, info.StartsAt, info.EndsAt, n);
     }
 
     [HttpGet("my-rank")]

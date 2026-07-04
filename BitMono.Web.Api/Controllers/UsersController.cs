@@ -42,6 +42,35 @@ public sealed class UsersController(IServiceScopeFactory scopeFactory) : Control
             .Select(x => new ProfileBadge(x.Code, x.Name, x.Description, x.Rarity, x.AwardedAt))
             .ToListAsync(ct);
 
+        // Author-side stats across this user's published crackmes: total solves, total downloads, and
+        // the median hours from publish to first solve (how quickly the community cracks their work).
+        var authoredRows = await db.Crackmes.AsNoTracking()
+            .Where(c => c.UploaderUserId == u.Id && c.Status == CrackmeStatus.Approved && !c.IsTakenDown)
+            .Select(c => new { c.Id, c.SolvedCount, c.DownloadCount, Published = c.PublishedAt ?? c.CreatedAt })
+            .ToListAsync(ct);
+        var authoredSolves = authoredRows.Sum(x => (long)x.SolvedCount);
+        var authoredDownloads = authoredRows.Sum(x => x.DownloadCount);
+        double? medianFirstSolveHours = null;
+        if (authoredRows.Count > 0)
+        {
+            var ids = authoredRows.Select(x => x.Id).ToList();
+            var firstSolves = await db.Solves.AsNoTracking()
+                .Where(s => ids.Contains(s.CrackmeId))
+                .GroupBy(s => s.CrackmeId)
+                .Select(g => new { CrackmeId = g.Key, First = g.Min(s => s.SolvedAt) })
+                .ToListAsync(ct);
+            var publishedBy = authoredRows.ToDictionary(x => x.Id, x => x.Published);
+            var hours = firstSolves
+                .Select(f => (f.First - publishedBy[f.CrackmeId]).TotalHours)
+                .Where(h => h >= 0)
+                .OrderBy(h => h)
+                .ToList();
+            if (hours.Count > 0)
+                medianFirstSolveHours = Math.Round(
+                    hours.Count % 2 == 1 ? hours[hours.Count / 2] : (hours[hours.Count / 2 - 1] + hours[hours.Count / 2]) / 2,
+                    1);
+        }
+
         // A hidden bio disappears for the public; the owner and staff still see it (with the reason)
         // so it can be fixed or unhidden.
         var viewerId = User.UserIdOrNull();
@@ -53,7 +82,8 @@ public sealed class UsersController(IServiceScopeFactory scopeFactory) : Control
         return Ok(new UserProfile(
             u.Id, u.Handle!, u.DisplayName, u.AvatarUrl, u.Role.ToString(), u.CreatedAt,
             u.Points, Ranks.For(u.Points).Name, position, solves, authored, writeups, badges,
-            bio, bioHidden, bioHidden ? u.BioHiddenReason : null));
+            bio, bioHidden, bioHidden ? u.BioHiddenReason : null,
+            authoredSolves, authoredDownloads, medianFirstSolveHours));
     }
 
     [HttpGet("{handle}/crackmes")]

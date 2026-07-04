@@ -9,6 +9,7 @@ import {
   REPORT_REASONS, reportCrackme, takedownCrackme, restoreCrackme, approveCrackme, rejectCrackme,
   type ModerationEvent, getModerationHistory,
   markSolved, unmarkSolved, submitFlag, setVerification, VERIFICATION_KINDS,
+  type HintItem, getHints, unlockHint, addHint, deleteHint,
   platformLabel, languageLabel, difficultyNumber, formatSize, formatDate, statusLabel,
 } from '../lib/crackmes'
 import { type Me, isAdmin, isModerator, useAuth } from '../lib/auth'
@@ -17,6 +18,7 @@ import { ImageGallery } from '../components/ImageGallery'
 import { MentionText } from '../components/MentionText'
 import { Turnstile } from '../components/Turnstile'
 import { Tooltip } from '../components/Tooltip'
+import { StaffTag } from '../components/StaffTag'
 import { getConfig } from '../lib/config'
 import { useTitle } from '../lib/useTitle'
 
@@ -132,6 +134,7 @@ export default function CrackmeDetail() {
       <ReportControl slug={c.slug} />
       <ModerationHistory slug={c.slug} />
 
+      <HintsPanel slug={c.slug} me={me} isOwner={c.isOwner} solved={c.solvedByMe} />
       <RatingsPanel slug={c.slug} me={me} initial={c} />
       <WriteupsPanel slug={c.slug} me={me} isOwner={c.isOwner} zipPassword={zipPassword} turnstileSiteKey={turnstileSiteKey} />
       <CommentsPanel slug={c.slug} crackmeId={c.id} me={me} commentReactionsEnabled={c.commentReactionsEnabled} commentsLocked={c.commentsLocked} turnstileSiteKey={turnstileSiteKey} />
@@ -182,7 +185,8 @@ function Tombstone({ c, canRestore, onRestore }: { c: Detail; canRestore: boolea
         {c.takenDownAt && <p className="mt-3 font-mono text-[11px] text-faint">removed {formatDate(c.takenDownAt)}</p>}
       </div>
       {canRestore && (
-        <div className="mt-4 text-center">
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <StaffTag label="admin" />
           <button onClick={() => setPrompting(true)} disabled={busy} className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-acid hover:text-acid disabled:opacity-50">
             {busy ? '…' : 'restore this crackme'}
           </button>
@@ -268,7 +272,10 @@ function ModeratePanel({ c, onChange }: { c: Detail; onChange: () => void }) {
 
   return (
     <div className="mt-4 rounded-lg border border-dashed border-yellow-400/40 bg-yellow-400/5 p-4">
-      <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-yellow-400/80">Review this submission</div>
+      <div className="mb-2 flex items-center gap-2">
+        <StaffTag label="mod" />
+        <span className="font-mono text-[11px] uppercase tracking-wider text-yellow-400/80">Review this submission</span>
+      </div>
       <p className="mb-3 font-mono text-[12px] text-muted">
         Approve to publish it to the gallery now, or reject it with a reason the author sees on their submissions page.
       </p>
@@ -320,7 +327,7 @@ function AdminControls({ c, onChange }: { c: Detail; onChange: () => void }) {
   }
   return (
     <div className="mt-10 rounded-lg border border-dashed border-red-400/40 bg-red-400/5 p-4">
-      <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-red-400/80">Admin</div>
+      <div className="mb-2"><StaffTag label="admin" /></div>
       <p className="mb-3 font-mono text-[12px] text-muted">Remove this crackme from the gallery. Visitors will see a takedown notice with your reason.</p>
       <button onClick={() => setPrompting(true)} disabled={busy} className="rounded-full border border-red-400/50 px-4 py-2 font-mono text-sm text-red-400 transition-colors hover:bg-red-400/10 disabled:opacity-50">
         {busy ? '…' : 'take down'}
@@ -551,6 +558,23 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
     }
   }
 
+  // Replies are one level deep — replyTo holds the top-level comment id whose reply box is open.
+  const [replyTo, setReplyTo] = useState<string | null>(null)
+  const [replyBody, setReplyBody] = useState('')
+  const [replyBusy, setReplyBusy] = useState(false)
+  const openReply = (rootId: string) => { setReplyTo(rootId); setReplyBody('') }
+  const sendReply = async (rootId: string) => {
+    if (!replyBody.trim()) return
+    setReplyBusy(true)
+    const added = await postComment(slug, replyBody.trim(), false, captcha, rootId)
+    setReplyBusy(false)
+    if (added) {
+      setComments((xs) => [...xs, added])
+      setReplyTo(null); setReplyBody('')
+      setCaptcha(null); setTsKey((k) => k + 1)
+    }
+  }
+
   const hide = async (id: string) => {
     const r = await hideComment(id)
     if (r !== null) setComments((xs) => xs.map((x) => (x.id === id ? { ...x, isHidden: r } : x)))
@@ -582,69 +606,117 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
     setHistory((cur) => ({ ...cur, [id]: h }))
   }
 
+  // Flat list → one-level tree: roots keep gallery order, replies group under their parent.
+  const roots = comments.filter((c) => !c.parentCommentId)
+  const repliesByParent = new Map<string, CommentItem[]>()
+  for (const c of comments)
+    if (c.parentCommentId) repliesByParent.set(c.parentCommentId, [...(repliesByParent.get(c.parentCommentId) ?? []), c])
+
+  // One comment card's contents (header + body + actions), shared by roots and replies.
+  const renderComment = (cm: CommentItem) => {
+    const rootId = cm.parentCommentId ?? cm.id
+    return (
+      <div id={`comment-${cm.id}`} className={cm.isHidden ? 'opacity-60' : ''}>
+        {cm.isDeleted ? (
+          <p className="font-mono text-[12px] italic text-faint">// comment deleted by its author</p>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-faint">
+              <span>{cm.authorHandle
+                ? <Link to={`/user/${cm.authorHandle}`} className="transition-colors hover:text-acid">{cm.author}</Link>
+                : cm.author} · <PermalinkDate anchor={`comment-${cm.id}`}>{formatDate(cm.createdAt)}</PermalinkDate>{cm.edited && <button onClick={() => showHistory(cm.id)} className="ml-1 transition-colors hover:text-acid">· edited</button>}{cm.isHidden && <span className="ml-1 text-orange-400">· hidden</span>}</span>
+              <span className="flex gap-2">
+                {me && !locked && <button onClick={() => openReply(rootId)} className="transition-colors hover:text-acid">reply</button>}
+                {cm.mine && editing !== cm.id && <button onClick={() => startEdit(cm)} className="transition-colors hover:text-acid">edit</button>}
+                {cm.mine && <button onClick={() => setConfirmDel(cm.id)} className="transition-colors hover:text-red-400">delete</button>}
+                {isMod && (
+                  <span className="inline-flex items-center gap-1">
+                    <StaffTag label="mod" />
+                    {cm.isHidden
+                      ? <Tooltip label="unhide comment"><button onClick={() => hide(cm.id)} className="transition-colors hover:text-acid">unhide</button></Tooltip>
+                      : <Tooltip label="hide comment"><button onClick={() => setConfirmHide(cm.id)} className="transition-colors hover:text-red-400">hide</button></Tooltip>}
+                  </span>
+                )}
+              </span>
+            </div>
+            {editing === cm.id ? (
+              <div className="mt-2">
+                <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} maxLength={4000}
+                  className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid" />
+                <div className="mt-1 flex items-center gap-3">
+                  <label className="flex items-center gap-2 font-mono text-[12px] text-muted">
+                    <input type="checkbox" checked={editSpoiler} onChange={(e) => setEditSpoiler(e.target.checked)} /> spoiler
+                  </label>
+                  <button onClick={() => setEditing(null)} className="rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-acid hover:text-acid">cancel</button>
+                  <button onClick={() => saveEdit(cm.id)} disabled={!editBody.trim()} className="btn-acid ml-auto px-3 py-1 text-[12px] disabled:opacity-50">save</button>
+                </div>
+              </div>
+            ) : cm.isSpoiler && !revealed.has(cm.id) ? (
+              <button onClick={() => setRevealed((s) => new Set(s).add(cm.id))} className="mt-1 font-mono text-[13px] text-acid hover:underline">[spoiler — click to reveal]</button>
+            ) : (
+              <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90"><MentionText text={cm.body} /></p>
+            )}
+            {history[cm.id] && (
+              <div className="mt-2 space-y-1 rounded border border-line bg-void/40 p-2">
+                <div className="font-mono text-[10px] uppercase tracking-wider text-faint">edit history</div>
+                {history[cm.id].length === 0
+                  ? <p className="font-mono text-[12px] text-faint">no prior versions.</p>
+                  : history[cm.id].map((h, i) => (
+                    <p key={i} className="whitespace-pre-wrap font-mono text-[12px] text-muted"><span className="text-faint">{formatDate(h.editedAt)} — </span>{h.body}</p>
+                  ))}
+              </div>
+            )}
+            {commentReactionsEnabled && (
+              <div className="mt-2">
+                <ReactionBar initialCounts={cm.reactions} initialMine={cm.myReactions} canReact={!!me} toggle={(e) => toggleCommentReaction(cm.id, e)} />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="mt-10">
       <div className="mb-3 flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-wider text-faint">Comments ({comments.length}){locked && <span className="ml-2 normal-case text-faint">· 🔒 locked</span>}</span>
-        {isMod && <button onClick={() => (locked ? toggleLock() : setConfirmLock(true))} className="font-mono text-[12px] text-faint transition-colors hover:text-acid">{locked ? 'unlock comments' : 'lock comments'}</button>}
+        {isMod && (
+          <span className="inline-flex items-center gap-1.5">
+            <StaffTag label="mod" />
+            <button onClick={() => (locked ? toggleLock() : setConfirmLock(true))} className="font-mono text-[12px] text-faint transition-colors hover:text-acid">{locked ? 'unlock comments' : 'lock comments'}</button>
+          </span>
+        )}
       </div>
 
       <div className="space-y-3">
         {comments.length === 0 && <p className="font-mono text-[13px] text-faint">No comments yet.</p>}
-        {comments.map((cm) => (
-          <div key={cm.id} id={`comment-${cm.id}`} className={`rounded-lg border border-line bg-surface/30 p-3 ${cm.isHidden ? 'opacity-60' : ''}`}>
-            {cm.isDeleted ? (
-              <p className="font-mono text-[12px] italic text-faint">// comment deleted by its author</p>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-faint">
-                  <span>{cm.authorHandle
-                    ? <Link to={`/user/${cm.authorHandle}`} className="transition-colors hover:text-acid">{cm.author}</Link>
-                    : cm.author} · <PermalinkDate anchor={`comment-${cm.id}`}>{formatDate(cm.createdAt)}</PermalinkDate>{cm.edited && <button onClick={() => showHistory(cm.id)} className="ml-1 transition-colors hover:text-acid">· edited</button>}{cm.isHidden && <span className="ml-1 text-orange-400">· hidden</span>}</span>
-                  <span className="flex gap-2">
-                    {cm.mine && editing !== cm.id && <button onClick={() => startEdit(cm)} className="transition-colors hover:text-acid">edit</button>}
-                    {cm.mine && <button onClick={() => setConfirmDel(cm.id)} className="transition-colors hover:text-red-400">delete</button>}
-                    {isMod && (cm.isHidden
-                      ? <Tooltip label="unhide comment"><button onClick={() => hide(cm.id)} className="transition-colors hover:text-acid">unhide</button></Tooltip>
-                      : <Tooltip label="hide comment"><button onClick={() => setConfirmHide(cm.id)} className="transition-colors hover:text-red-400">hide</button></Tooltip>)}
-                  </span>
-                </div>
-                {editing === cm.id ? (
-                  <div className="mt-2">
-                    <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} maxLength={4000}
-                      className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid" />
-                    <div className="mt-1 flex items-center gap-3">
-                      <label className="flex items-center gap-2 font-mono text-[12px] text-muted">
-                        <input type="checkbox" checked={editSpoiler} onChange={(e) => setEditSpoiler(e.target.checked)} /> spoiler
-                      </label>
-                      <button onClick={() => setEditing(null)} className="rounded-full border border-line px-3 py-1 font-mono text-[12px] text-muted transition-colors hover:border-acid hover:text-acid">cancel</button>
-                      <button onClick={() => saveEdit(cm.id)} disabled={!editBody.trim()} className="btn-acid ml-auto px-3 py-1 text-[12px] disabled:opacity-50">save</button>
+        {roots.map((cm) => {
+          const replies = repliesByParent.get(cm.id) ?? []
+          return (
+            <div key={cm.id} className="rounded-lg border border-line bg-surface/30 p-3">
+              {renderComment(cm)}
+              {(replies.length > 0 || replyTo === cm.id) && (
+                <div className="mt-3 space-y-3 border-l border-line/70 pl-3">
+                  {replies.map((r) => <div key={r.id}>{renderComment(r)}</div>)}
+                  {replyTo === cm.id && (
+                    <div>
+                      <textarea
+                        autoFocus value={replyBody} onChange={(e) => setReplyBody(e.target.value)} rows={2} maxLength={4000}
+                        placeholder="Reply… @handle mentions someone."
+                        className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
+                      />
+                      <div className="mt-1 flex items-center gap-3">
+                        <button onClick={() => setReplyTo(null)} className="font-mono text-[12px] text-faint transition-colors hover:text-ink">cancel</button>
+                        <button onClick={() => sendReply(cm.id)} disabled={replyBusy || !replyBody.trim()} className="btn-acid ml-auto px-3 py-1 text-[12px] disabled:opacity-50">{replyBusy ? '…' : 'reply'}</button>
+                      </div>
                     </div>
-                  </div>
-                ) : cm.isSpoiler && !revealed.has(cm.id) ? (
-                  <button onClick={() => setRevealed((s) => new Set(s).add(cm.id))} className="mt-1 font-mono text-[13px] text-acid hover:underline">[spoiler — click to reveal]</button>
-                ) : (
-                  <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90"><MentionText text={cm.body} /></p>
-                )}
-                {history[cm.id] && (
-                  <div className="mt-2 space-y-1 rounded border border-line bg-void/40 p-2">
-                    <div className="font-mono text-[10px] uppercase tracking-wider text-faint">edit history</div>
-                    {history[cm.id].length === 0
-                      ? <p className="font-mono text-[12px] text-faint">no prior versions.</p>
-                      : history[cm.id].map((h, i) => (
-                        <p key={i} className="whitespace-pre-wrap font-mono text-[12px] text-muted"><span className="text-faint">{formatDate(h.editedAt)} — </span>{h.body}</p>
-                      ))}
-                  </div>
-                )}
-                {commentReactionsEnabled && (
-                  <div className="mt-2">
-                    <ReactionBar initialCounts={cm.reactions} initialMine={cm.myReactions} canReact={!!me} toggle={(e) => toggleCommentReaction(cm.id, e)} />
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        ))}
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {locked ? (
@@ -704,6 +776,110 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
           danger
           onConfirm={() => { toggleLock(); setConfirmLock(false) }}
           onCancel={() => setConfirmLock(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// Author-written, point-costed hints. Owners write/manage them (bodies always visible to the author);
+// solvers see locked cards and pay a % of the solve to reveal — the biggest one unlocked is deducted at
+// solve time. Free once you've solved it. Self-hides when there are no hints and you're not the owner.
+function HintsPanel({ slug, me, isOwner, solved }: { slug: string; me: Me | null; isOwner: boolean; solved: boolean }) {
+  const [hints, setHints] = useState<HintItem[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [confirmUnlock, setConfirmUnlock] = useState<HintItem | null>(null)
+  // owner editor
+  const [adding, setAdding] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [cost, setCost] = useState(25)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { getHints(slug).then((h) => { setHints(h); setLoaded(true) }) }, [slug])
+
+  const unlock = async (h: HintItem) => {
+    setConfirmUnlock(null)
+    const r = await unlockHint(slug, h.id)
+    if (r) setHints((xs) => xs.map((x) => (x.id === h.id ? { ...x, unlocked: true, body: r.body } : x)))
+  }
+  const create = async () => {
+    if (!draft.trim()) return
+    setBusy(true)
+    const h = await addHint(slug, draft.trim(), cost)
+    setBusy(false)
+    if (h) { setHints((xs) => [...xs, h]); setDraft(''); setAdding(false) }
+  }
+  const remove = async (id: string) => {
+    if (await deleteHint(slug, id)) setHints((xs) => xs.filter((x) => x.id !== id))
+  }
+
+  if (!loaded) return null
+  if (hints.length === 0 && !isOwner) return null
+
+  return (
+    <div className="mt-10">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-faint">
+          Hints ({hints.length}){!isOwner && !solved && hints.length > 0 && <span className="ml-2 normal-case text-faint">· unlocking one costs points</span>}
+        </span>
+        {isOwner && <button onClick={() => setAdding((o) => !o)} className="font-mono text-[12px] text-acid hover:underline">{adding ? 'cancel' : '+ add a hint'}</button>}
+      </div>
+
+      {hints.length === 0 ? (
+        <p className="font-mono text-[13px] text-faint">No hints{isOwner ? ' yet — add one to help stuck solvers (they’ll pay points to reveal it).' : '.'}</p>
+      ) : (
+        <div className="space-y-2">
+          {hints.map((h, i) => {
+            const open = h.unlocked || h.body != null
+            return (
+              <div key={h.id} className={`rounded-lg border p-3 ${open ? 'border-line bg-surface/30' : 'border-dashed border-line bg-void/30'}`}>
+                <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-faint">
+                  <span>Hint {i + 1} <span className="text-acid">· −{h.costPercent}%</span></span>
+                  {isOwner && <button onClick={() => remove(h.id)} className="transition-colors hover:text-red-400">delete</button>}
+                </div>
+                {open ? (
+                  <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{h.body}</p>
+                ) : me ? (
+                  <button onClick={() => setConfirmUnlock(h)} className="mt-1 font-mono text-[13px] text-acid hover:underline">
+                    🔒 reveal — costs {h.costPercent}% of the points for this solve
+                  </button>
+                ) : (
+                  <p className="mt-1 font-mono text-[13px] text-faint">
+                    🔒 <Link to={`/login?returnUrl=/challenge/${slug}`} className="text-acid hover:underline">Sign in</Link> to unlock this hint.
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {isOwner && adding && (
+        <div className="mt-3 rounded-lg border border-dashed border-line bg-void/30 p-3">
+          <textarea
+            autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} rows={3} maxLength={2000}
+            placeholder="a nudge — where to look, what to patch, which method decrypts the strings…"
+            className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 font-mono text-[12px] text-muted">
+              cost
+              <select value={cost} onChange={(e) => setCost(Number(e.target.value))} className="rounded-lg border border-line bg-surface px-2 py-1 font-mono text-[12px] text-ink outline-none focus:border-acid">
+                {[10, 25, 50, 75].map((n) => <option key={n} value={n}>−{n}%</option>)}
+              </select>
+            </label>
+            <button onClick={create} disabled={busy || !draft.trim()} className="btn-acid ml-auto px-3 py-1 text-[12px] disabled:opacity-50">{busy ? '…' : 'add hint'}</button>
+          </div>
+        </div>
+      )}
+
+      {confirmUnlock && (
+        <ConfirmDialog
+          title={`Reveal this hint?`}
+          message={`It'll shave ${confirmUnlock.costPercent}% off the points you earn when you solve this crackme (only the biggest hint you unlock counts). Already-earned solves aren't affected.`}
+          confirmText={`reveal (−${confirmUnlock.costPercent}%)`}
+          onConfirm={() => unlock(confirmUnlock)}
+          onCancel={() => setConfirmUnlock(null)}
         />
       )}
     </div>

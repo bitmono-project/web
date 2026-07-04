@@ -22,14 +22,57 @@ public static class Scoring
     // 1.0 for the first solver, asymptotically → 0.30 as more people solve it.
     public static double Decay(int priorSolvers) => 0.30 + 0.70 / (1 + priorSolvers / 8.0);
 
-    public static int PointsFor(int effectiveDifficulty, int priorSolvers, bool firstBlood)
+    // hintPenaltyPercent (0..100) shaves off the biggest hint the solver unlocked before solving.
+    public static int PointsFor(int effectiveDifficulty, int priorSolvers, bool firstBlood, int hintPenaltyPercent = 0)
     {
         var b = Base[Math.Clamp(effectiveDifficulty, 1, 6) - 1];
         var pts = (int)Math.Round(b * Decay(priorSolvers));
         if (firstBlood) pts += (int)Math.Round(b * 0.5);
-        return pts;
+        if (hintPenaltyPercent > 0)
+            pts = (int)Math.Round(pts * (1 - Math.Clamp(hintPenaltyPercent, 0, 100) / 100.0));
+        return Math.Max(0, pts);
     }
 }
+
+// Recurring 13-week competitions. Everyone's season points reset to zero at each boundary, so a
+// newcomer can top the season board without ever catching the all-time leaders. Fully computed from
+// the clock — no rows, no cron to "start" one. Season 1 begins at Epoch.
+public static class Seasons
+{
+    // First season opens 2026-07-01 UTC. Stored as ticks so this stays a pure constant.
+    public static readonly DateTime Epoch = new(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
+    public static readonly TimeSpan Length = TimeSpan.FromDays(91); // 13 weeks, HTB-style
+
+    // RE-flavored season names; cycle once we run past the list (year suffix keeps them distinct).
+    private static readonly string[] Names =
+    [
+        "NOP Sled", "Dead Listing", "Ghost Map", "Null Deref",
+        "Stack Smash", "Cold Boot", "Shadow Stack", "Heap Spray",
+    ];
+
+    public static int NumberAt(DateTime utc)
+    {
+        if (utc < Epoch) return 1;
+        return (int)((utc - Epoch).Ticks / Length.Ticks) + 1;
+    }
+
+    public static int Current => NumberAt(DateTime.UtcNow);
+
+    public static DateTime StartOf(int number) => Epoch + Length * (number - 1);
+    public static DateTime EndOf(int number) => StartOf(number + 1);
+
+    public static string NameOf(int number)
+    {
+        var name = Names[(number - 1) % Names.Length];
+        var cycle = (number - 1) / Names.Length;
+        return cycle == 0 ? name : $"{name} {cycle + 1}";
+    }
+
+    public static SeasonInfo InfoOf(int number) =>
+        new(number, NameOf(number), StartOf(number), EndOf(number), number == Current);
+}
+
+public sealed record SeasonInfo(int Number, string Name, DateTime StartsAt, DateTime EndsAt, bool IsCurrent);
 
 public sealed record RankInfo(string Name, int MinPoints);
 
@@ -108,7 +151,11 @@ public static class SolveRecorder
 
         // Decay is keyed on the prior solver count = the fresh post-bump count minus this solve.
         var newCount = await db.Crackmes.AsNoTracking().Where(x => x.Id == c.Id).Select(x => x.SolvedCount).FirstAsync(ct);
-        var points = Scoring.PointsFor(Scoring.EffectiveDifficulty(c), Math.Max(0, newCount - 1), firstBlood);
+        // Biggest hint this user unlocked on this crackme shaves off its cost% (0 if none).
+        var hintPenalty = await db.HintUnlocks.AsNoTracking()
+            .Where(h => h.UserId == userId && h.CrackmeId == c.Id)
+            .Select(h => (int?)h.CostPercent).MaxAsync(ct) ?? 0;
+        var points = Scoring.PointsFor(Scoring.EffectiveDifficulty(c), Math.Max(0, newCount - 1), firstBlood, hintPenalty);
 
         solve.PointsAwarded = points;
         solve.IsFirstBlood = firstBlood;
