@@ -726,10 +726,17 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
   const load = () => getWriteups(slug).then(setWriteups)
   useEffect(() => { load() }, [slug])
 
-  const addImages = (files: FileList | null) =>
+  const addImages = (files: FileList | File[] | null) =>
     setImages((cur) => [...cur, ...Array.from(files ?? []).map((file) => ({ file, url: URL.createObjectURL(file) }))].slice(0, 10))
   const removeImage = (i: number) =>
     setImages((cur) => { URL.revokeObjectURL(cur[i].url); return cur.filter((_, j) => j !== i) })
+  // Ctrl+V a screenshot anywhere in the form — attaches it like the file picker would.
+  const onPaste = (e: React.ClipboardEvent) => {
+    const imgs = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'))
+    if (imgs.length === 0) return
+    e.preventDefault() // a pasted file would otherwise dump its name into the textarea
+    addImages(imgs)
+  }
 
   const send = async () => {
     if (!body.trim()) return
@@ -781,7 +788,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
       {phase === 'done' && <p className="mb-3 font-mono text-[12px] text-acid">Writeup submitted — it’ll appear here once a moderator approves it.</p>}
 
       {open && me && (
-        <div className="mb-4 rounded-lg border border-line bg-surface/30 p-4">
+        <div className="mb-4 rounded-lg border border-line bg-surface/30 p-4" onPaste={onPaste}>
           <p className="mb-2 font-mono text-[11px] text-faint">Explain how you solved it — Markdown welcome. Don’t just paste a key; show the process. Optional keygen/patched binary as attachment.</p>
           <input
             className="mb-2 w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
@@ -792,7 +799,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
             rows={8} maxLength={40000} placeholder="# How I cracked it&#10;..." value={body} onChange={(e) => setBody(e.target.value)}
           />
           <div className="mt-2">
-            <span className="font-mono text-[11px] text-faint">screenshots (optional) — PNG/JPG/WEBP/GIF · up to 10 · 50 MB total</span>
+            <span className="font-mono text-[11px] text-faint">screenshots (optional) — paste (Ctrl+V) or pick · PNG/JPG/WEBP/GIF · up to 10 · 50 MB total</span>
             <input type="file" accept="image/*" multiple onChange={(e) => { addImages(e.target.files); e.currentTarget.value = '' }} className="mt-1 block font-mono text-[12px] text-muted file:mr-2 file:rounded file:border-0 file:bg-line file:px-2 file:py-1 file:text-ink" />
             {images.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
