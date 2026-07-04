@@ -1,4 +1,4 @@
-using System.Security.Claims;
+using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -17,7 +17,7 @@ public sealed class NotificationsController(IServiceScopeFactory scopeFactory) :
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
 
         var items = await db.Notifications.AsNoTracking()
             .Where(n => n.RecipientUserId == uid)
@@ -34,7 +34,7 @@ public sealed class NotificationsController(IServiceScopeFactory scopeFactory) :
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         return await db.Notifications.AsNoTracking().CountAsync(n => n.RecipientUserId == uid && !n.IsRead, ct);
     }
 
@@ -43,7 +43,7 @@ public sealed class NotificationsController(IServiceScopeFactory scopeFactory) :
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         await db.Notifications.Where(n => n.RecipientUserId == uid && !n.IsRead)
             .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), ct);
         return NoContent();
@@ -54,7 +54,7 @@ public sealed class NotificationsController(IServiceScopeFactory scopeFactory) :
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         await db.Notifications.Where(n => n.Id == id && n.RecipientUserId == uid)
             .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), ct);
         return NoContent();

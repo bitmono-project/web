@@ -125,7 +125,12 @@ export default function Moderation() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="font-mono text-[13px]">
                     <span className="rounded border border-red-400/40 px-1.5 py-px text-[11px] uppercase text-red-400">{r.reason}</span>{' '}
-                    <Link to={`/challenge/${r.crackmeSlug}`} className="text-acid hover:underline">{r.crackmeTitle}</Link>
+                    {r.targetType === 'userProfile'
+                      ? <>
+                          <span className="mr-1 rounded border border-line px-1.5 py-px text-[11px] uppercase text-faint">profile</span>
+                          <Link to={`/user/${r.targetHandle}`} className="text-acid hover:underline">{r.targetName ?? `@${r.targetHandle}`}</Link>
+                        </>
+                      : <Link to={`/challenge/${r.crackmeSlug}`} className="text-acid hover:underline">{r.crackmeTitle}</Link>}
                     <span className="ml-2 text-faint">
                       {r.reporterHandle
                         ? <Link to={`/user/${r.reporterHandle}`} className="transition-colors hover:text-acid">{r.reporter}</Link>

@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
-  type CrackmeFilters, type CrackmeListItem, listCrackmes,
+  type CrackmeFilters, type CrackmeListItem, listCrackmes, randomCrackme,
   PLATFORMS, platformLabel, difficultyNumber, formatSize, formatDate,
 } from '../lib/crackmes'
+import { Tooltip } from '../components/Tooltip'
 import { useTitle } from '../lib/useTitle'
 
 const SORTS = [
@@ -20,6 +21,16 @@ export default function CrackmesList() {
   const [items, setItems] = useState<CrackmeListItem[]>([])
   const [total, setTotal] = useState(0)
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [rolling, setRolling] = useState(false)
+  const navigate = useNavigate()
+
+  // The RE take on "I'm feeling lucky" — jump to a random crackme that matches the current filters.
+  const roll = async () => {
+    setRolling(true)
+    const slug = await randomCrackme(filters)
+    setRolling(false)
+    if (slug) navigate(`/challenge/${slug}`)
+  }
 
   // ponytail: refetch on every filter change — dataset is small. Add debounce when it grows.
   useEffect(() => {
@@ -72,6 +83,15 @@ export default function CrackmesList() {
         <label className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-muted">
           <input type="checkbox" checked={!!filters.bitMonoOnly} onChange={(e) => set({ bitMonoOnly: e.target.checked || undefined })} /> BitMono only
         </label>
+        <Tooltip label="jump to a random crackme — honors your filters">
+          <button
+            onClick={roll}
+            disabled={rolling || state !== 'ok' || items.length === 0}
+            className={`${input} text-muted transition-colors hover:border-acid hover:text-acid disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            {rolling ? 'jmp …' : 'jmp [random]'}
+          </button>
+        </Tooltip>
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-line">

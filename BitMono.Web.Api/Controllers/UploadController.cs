@@ -174,7 +174,7 @@ public sealed class UploadController(
     // verification, ensure a unique slug, and persist. Caller sets a base Slug; this makes it unique.
     private async Task<IActionResult> FinishSubmitAsync(Crackme crackme, UploadForm form, CancellationToken ct)
     {
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         var now = DateTime.UtcNow;
         crackme.UploaderUserId = uid;
         crackme.AnonymousHandle = User.Identity?.Name ?? AppConstants.AnonymousHandle;

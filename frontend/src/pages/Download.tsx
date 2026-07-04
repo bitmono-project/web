@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Tooltip } from '../components/Tooltip'
 import { useTitle } from '../lib/useTitle'
 import {
   getReleases, detectOs, formatSize, shortSha, uniq,
@@ -280,12 +281,13 @@ function PathCard({ on, onClick, icon, title, sub }: { on: boolean; onClick: () 
 }
 
 function Chip({ on, onClick, title, children }: { on: boolean; onClick: () => void; title?: string; children: ReactNode }) {
-  return (
-    <button title={title} onClick={onClick}
+  const btn = (
+    <button onClick={onClick}
       className={`inline-flex items-center rounded-full border px-3 py-1 font-mono text-xs transition-colors ${on ? 'border-acid text-acid' : 'border-line text-muted hover:text-ink'}`}>
       {children}
     </button>
   )
+  return title ? <Tooltip label={title}>{btn}</Tooltip> : btn
 }
 
 function ChipRow({ label, children }: { label: string; children: ReactNode }) {
@@ -312,7 +314,9 @@ function DownloadCard({ asset }: { asset: ReleaseAsset }) {
       <Corners />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <div className="truncate font-mono text-sm text-ink" title={asset.name}>{asset.name}</div>
+          <Tooltip label={asset.name} className="max-w-full">
+            <span className="min-w-0 truncate font-mono text-sm text-ink">{asset.name}</span>
+          </Tooltip>
           <div className="mt-1 font-mono text-[12px] text-muted">
             {meta} · {formatSize(asset.size)}
             {asset.downloads > 0 && <span className="text-faint"> · {asset.downloads.toLocaleString()} downloads</span>}
@@ -439,11 +443,12 @@ function VirusTotal({ asset }: { asset: ReleaseAsset }) {
   if (vt?.status === 'done') {
     const clean = vt.flagged === 0
     return (
-      <a href={vtUrl(asset)} target="_blank" rel="noreferrer"
-        className={`ml-auto transition-colors hover:underline ${clean ? 'text-acid' : 'text-amber-400'}`}
-        title="VirusTotal report">
-        {clean ? '✓' : '⚠'} {vt.flagged}/{vt.total} VirusTotal ↗
-      </a>
+      <Tooltip label="VirusTotal report" className="ml-auto">
+        <a href={vtUrl(asset)} target="_blank" rel="noreferrer"
+          className={`transition-colors hover:underline ${clean ? 'text-acid' : 'text-amber-400'}`}>
+          {clean ? '✓' : '⚠'} {vt.flagged}/{vt.total} VirusTotal ↗
+        </a>
+      </Tooltip>
     )
   }
   return (

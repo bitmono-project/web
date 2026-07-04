@@ -1,3 +1,5 @@
+using BitMono.Web.Data;
+
 namespace BitMono.Web.Api.Models;
 
 // The three shapes BitMono ships per release. Kind is the real branching type (enum, per house style);
@@ -21,9 +23,10 @@ public sealed record ReleaseAsset(
     string? Format = null,         // unitypackage | upm
     AssetScan? Vt = null);         // VirusTotal result, once the scan job has run (null = not scanned yet)
 
-// VirusTotal verdict for an asset. Status "done" → Flagged/Total are meaningful (e.g. 0/72); "pending" →
-// submitted, awaiting analysis. Absent entirely when scanning is off (no API key) or the file is brand new.
-public sealed record AssetScan(string Status, int Flagged, int Total);
+// VirusTotal verdict for an asset. Status Done → Flagged/Total are meaningful (e.g. 0/72); Pending →
+// submitted, awaiting analysis; Skipped → over VT's upload cap, use the hash-search fallback. Absent
+// entirely when scanning is off (no API key) or the file is brand new. Serializes camelCase.
+public sealed record AssetScan(ScanStatus Status, int Flagged, int Total);
 
 public sealed record ReleaseResponse(
     string Version,

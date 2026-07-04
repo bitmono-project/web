@@ -17,6 +17,7 @@ export const en: Dict = {
     login: 'login',
     logout: 'logout',
     notifications: 'Notifications',
+    search: 'Search',
     language: 'Language',
   },
   blog: {

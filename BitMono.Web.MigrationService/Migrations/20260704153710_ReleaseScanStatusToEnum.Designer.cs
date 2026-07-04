@@ -3,6 +3,7 @@ using System;
 using BitMono.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BitMono.Web.MigrationService.Migrations
 {
     [DbContext(typeof(CrackmesDbContext))]
-    partial class CrackmesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260704153710_ReleaseScanStatusToEnum")]
+    partial class ReleaseScanStatusToEnum
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -776,17 +779,6 @@ namespace BitMono.Web.MigrationService.Migrations
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(400)
                         .HasColumnType("character varying(400)");
-
-                    b.Property<string>("Bio")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<bool>("BioHidden")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("BioHiddenReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");

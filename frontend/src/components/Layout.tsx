@@ -5,6 +5,7 @@ import { isAdmin, isModerator, useAuth } from '../lib/auth'
 import { getUnreadCount } from '../lib/notifications'
 import { useT } from '../lib/i18n'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { SearchDialog } from './SearchDialog'
 import { Tooltip } from './Tooltip'
 
 export function Layout() {
@@ -78,6 +79,7 @@ function Header() {
         {isModerator(me) && !isAdmin(me) && <Link to="/moderation" className="transition-colors hover:text-ink">{t('nav.review')}</Link>}
         {isAdmin(me) && <Link to="/admin" className="transition-colors hover:text-acid">{t('nav.admin')}</Link>}
         <a href="https://docs.bitmono.dev" className="hidden transition-colors hover:text-ink sm:inline">{t('nav.docs')}</a>
+        <SearchButton />
         {!loading && (me
           ? (
             <span className="flex items-center gap-3">
@@ -122,6 +124,35 @@ function Footer() {
         </div>
       </div>
     </footer>
+  )
+}
+
+// Header magnifier that opens the site-wide search palette; Ctrl/⌘+K works from anywhere.
+function SearchButton() {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  return (
+    <>
+      <Tooltip label={`${t('nav.search')} · Ctrl+K`} placement="bottom">
+        <button onClick={() => setOpen(true)} aria-label={t('nav.search')} className="text-muted transition-colors hover:text-acid">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+        </button>
+      </Tooltip>
+      {open && <SearchDialog onClose={() => setOpen(false)} />}
+    </>
   )
 }
 

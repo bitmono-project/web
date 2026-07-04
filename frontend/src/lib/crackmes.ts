@@ -139,7 +139,7 @@ export function formatDate(iso: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} ${tz}`
 }
 
-export async function listCrackmes(f: CrackmeFilters): Promise<CrackmeListResponse> {
+function filterParams(f: CrackmeFilters): URLSearchParams {
   const params = new URLSearchParams()
   if (f.q) params.set('q', f.q)
   if (f.platform) params.set('platform', f.platform)
@@ -147,11 +147,23 @@ export async function listCrackmes(f: CrackmeFilters): Promise<CrackmeListRespon
   if (f.maxDifficulty) params.set('maxDifficulty', String(f.maxDifficulty))
   if (f.protection) params.set('protection', f.protection)
   if (f.bitMonoOnly) params.set('bitMonoOnly', 'true')
+  return params
+}
+
+export async function listCrackmes(f: CrackmeFilters): Promise<CrackmeListResponse> {
+  const params = filterParams(f)
   if (f.sort) params.set('sort', f.sort)
   if (f.page && f.page > 1) params.set('page', String(f.page))
   const res = await fetch(`/api/crackmes?${params.toString()}`)
   if (!res.ok) throw new Error(`Failed to load crackmes (${res.status})`)
   return (await res.json()) as CrackmeListResponse
+}
+
+// The gallery's "jmp [random]" — one random public crackme honoring the current filters.
+export async function randomCrackme(f: CrackmeFilters): Promise<string | null> {
+  const res = await fetch(`/api/crackmes/random?${filterParams(f).toString()}`)
+  if (!res.ok) return null
+  return ((await res.json()) as { slug: string }).slug
 }
 
 export async function getCrackme(slug: string): Promise<CrackmeDetail | null> {
@@ -274,6 +286,7 @@ export interface ProfileBadge {
 }
 
 export interface UserProfile {
+  id: string
   handle: string
   displayName: string
   avatar: string | null
@@ -286,6 +299,10 @@ export interface UserProfile {
   authored: number
   writeups: number
   badges: ProfileBadge[]
+  // bio is null for the public while hidden; owner/staff still get it (with bioHidden + the reason)
+  bio: string | null
+  bioHidden: boolean
+  bioHiddenReason: string | null
 }
 
 export interface ProfileCrackme {
@@ -305,6 +322,30 @@ export async function getUserProfile(handle: string): Promise<UserProfile | null
 export async function getUserCrackmes(handle: string): Promise<ProfileCrackme[]> {
   const res = await fetch(`/api/users/${encodeURIComponent(handle)}/crackmes`)
   return res.ok ? ((await res.json()) as ProfileCrackme[]) : []
+}
+
+// Set (or clear) your own profile bio. Editing clears a moderator hide server-side.
+export async function updateMyBio(bio: string): Promise<boolean> {
+  const res = await fetch('/api/users/me/bio', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bio }),
+  })
+  return res.ok
+}
+
+export async function reportProfile(handle: string, reason: string, details: string): Promise<boolean> {
+  const res = await fetch(`/api/users/${encodeURIComponent(handle)}/report`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason, details: details || null }),
+  })
+  return res.ok
+}
+
+// Moderator: hide/unhide a profile bio (toggle). Reason is required when hiding.
+export async function toggleBioHide(userId: string, reason: string | null): Promise<boolean | null> {
+  const res = await fetch(`/api/moderation/users/${userId}/bio-hide`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+  })
+  return res.ok ? ((await res.json()) as { bioHidden: boolean }).bioHidden : null
 }
 
 // --- moderation (moderator/admin only) ---
@@ -677,8 +718,11 @@ export const REPORT_REASONS = [
 
 export interface PendingReport {
   id: string
-  crackmeSlug: string
-  crackmeTitle: string
+  targetType: string // crackme | userProfile
+  crackmeSlug: string | null
+  crackmeTitle: string | null
+  targetHandle: string | null
+  targetName: string | null
   reason: string
   details: string | null
   reporter: string

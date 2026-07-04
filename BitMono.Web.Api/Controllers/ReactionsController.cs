@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Data;
@@ -60,7 +59,7 @@ public sealed class ReactionsController(IServiceScopeFactory scopeFactory) : Con
     private async Task<ReactionSummary> ToggleAsync(
         CrackmesDbContext db, ModeratableType type, Guid targetId, string emoji, bool singlePerUser, CancellationToken ct)
     {
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         var existing = await db.Reactions
             .FirstOrDefaultAsync(r => r.TargetType == type && r.TargetId == targetId && r.UserId == uid && r.Emoji == emoji, ct);
 

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using AspNet.Security.OAuth.Discord;
 using AspNet.Security.OAuth.GitHub;
 using BitMono.Web.Api.Auth;
+using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Data;
 using BitMono.Web.Data.Entities;
@@ -25,7 +26,7 @@ public sealed class AuthController(IWebHostEnvironment env, IAuthenticationSchem
 
         // Handle (profile slug) isn't a claim — look it up by uid so the nav can link the name to /user/{handle}.
         string? handle = null;
-        if (Guid.TryParse(User.FindFirstValue("uid"), out var uid))
+        if (User.UserIdOrNull() is { } uid)
         {
             await using var scope = scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();

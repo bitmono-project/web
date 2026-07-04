@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using BitMono.Web.Api.Helpers;
@@ -28,20 +27,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
 
-        var query = db.Crackmes.AsNoTracking().Where(Public);
-
-        if (!string.IsNullOrWhiteSpace(q.Q))
-            query = query.Where(c => EF.Functions.ILike(c.Title, $"%{q.Q}%"));
-        if (q.Platform is { } platform)
-            query = query.Where(c => c.TargetPlatform == platform);
-        if (q.MinDifficulty is { } min)
-            query = query.Where(c => (int)c.AuthorDifficulty >= min);
-        if (q.MaxDifficulty is { } max)
-            query = query.Where(c => (int)c.AuthorDifficulty <= max);
-        if (!string.IsNullOrWhiteSpace(q.Protection))
-            query = query.Where(c => c.ProtectionsApplied.Any(p => p.Name == q.Protection));
-        if (q.BitMonoOnly == true)
-            query = query.Where(c => c.IsBitMonoObfuscated);
+        var query = ApplyFilters(db.Crackmes.AsNoTracking().Where(Public), q);
 
         var total = await query.CountAsync(ct);
 
@@ -67,13 +53,44 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         return new CrackmeListResponse(items, total, page, size);
     }
 
+    // One random public crackme honoring the same filters as the list — the gallery's "jmp [random]" button.
+    [HttpGet("random")]
+    public async Task<IActionResult> Random([FromQuery] CrackmeQuery q, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+
+        var slug = await ApplyFilters(db.Crackmes.AsNoTracking().Where(Public), q)
+            .OrderBy(c => EF.Functions.Random())
+            .Select(c => c.Slug)
+            .FirstOrDefaultAsync(ct);
+        return slug is null ? NotFound() : Ok(new { slug });
+    }
+
+    private static IQueryable<Crackme> ApplyFilters(IQueryable<Crackme> query, CrackmeQuery q)
+    {
+        if (!string.IsNullOrWhiteSpace(q.Q))
+            query = query.Where(c => EF.Functions.ILike(c.Title, $"%{q.Q}%"));
+        if (q.Platform is { } platform)
+            query = query.Where(c => c.TargetPlatform == platform);
+        if (q.MinDifficulty is { } min)
+            query = query.Where(c => (int)c.AuthorDifficulty >= min);
+        if (q.MaxDifficulty is { } max)
+            query = query.Where(c => (int)c.AuthorDifficulty <= max);
+        if (!string.IsNullOrWhiteSpace(q.Protection))
+            query = query.Where(c => c.ProtectionsApplied.Any(p => p.Name == q.Protection));
+        if (q.BitMonoOnly == true)
+            query = query.Where(c => c.IsBitMonoObfuscated);
+        return query;
+    }
+
     // The uploader's own submissions, including pending/rejected/taken-down ones the public can't see,
     // plus the moderator's message so they know why something wasn't approved.
     [HttpGet("mine")]
     [Authorize]
     public async Task<IReadOnlyList<MySubmission>> Mine(CancellationToken ct)
     {
-        var uid = CurrentUserId();
+        var uid = User.UserIdOrNull();
         if (uid is null)
             return [];
 
@@ -109,7 +126,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         }
         // Moderators/admins — and the uploader themselves — can open a not-yet-approved (pending/rejected)
         // crackme to preview the full page; the public still gets 404 for anything that isn't Approved.
-        var uid = CurrentUserId();
+        var uid = User.UserIdOrNull();
         var isStaff = User.IsInRole(nameof(UserRole.Moderator)) || User.IsInRole(nameof(UserRole.Admin));
         var isOwner = uid is not null && uid == c.UploaderUserId;
         if (c.Status != CrackmeStatus.Approved && !isStaff && !isOwner)
@@ -183,7 +200,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (c is null)
             return NotFound();
 
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         if (c.UploaderUserId == uid)
             return BadRequest("You can't mark your own crackme as solved.");
         if (c.VerificationKind != VerificationKind.None)
@@ -205,7 +222,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (id is null)
             return NotFound();
 
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         await SolveRecorder.RemoveAsync(db, id.Value, uid, ct);
         var solvedCount = await db.Crackmes.Where(x => x.Id == id.Value).Select(x => x.SolvedCount).FirstAsync(ct);
         return Ok(new SolveResult(false, solvedCount, false, 0));
@@ -225,7 +242,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var c = await db.Crackmes.FirstOrDefaultAsync(x => x.Slug == slug, ct);
         if (c is null)
             return NotFound();
-        if (c.UploaderUserId != CurrentUserId()
+        if (c.UploaderUserId != User.UserIdOrNull()
             && !User.IsInRole(nameof(UserRole.Moderator)) && !User.IsInRole(nameof(UserRole.Admin)))
             return Forbid();
 
@@ -262,7 +279,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (c.VerificationKind == VerificationKind.None)
             return BadRequest("This crackme doesn't use answer verification.");
 
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         if (c.UploaderUserId == uid)
             return BadRequest("You can't solve your own crackme.");
 
@@ -307,7 +324,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var c = await db.Crackmes.AsNoTracking().FirstOrDefaultAsync(x => x.Slug == slug, ct);
         if (c is null)
             return NotFound();
-        var uid = CurrentUserId();
+        var uid = User.UserIdOrNull();
         var isStaff = User.IsInRole(nameof(UserRole.Moderator)) || User.IsInRole(nameof(UserRole.Admin));
         var isPublic = c.Status == CrackmeStatus.Approved && !c.IsTakenDown;
         var canPreview = !c.IsTakenDown && (isStaff || (uid is not null && uid == c.UploaderUserId));
@@ -354,7 +371,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var reactions = await db.Reactions.AsNoTracking()
             .Where(r => r.TargetType == ModeratableType.Comment && ids.Contains(r.TargetId))
             .Select(r => new CommentReactionRow(r.TargetId, r.Emoji, r.UserId)).ToListAsync(ct);
-        var uid = CurrentUserId();
+        var uid = User.UserIdOrNull();
 
         // Resolve commenter handles in one query so each name can link to its profile.
         var authorIds = rows.Where(r => r.AuthorUserId != null).Select(r => r.AuthorUserId!.Value).Distinct().ToList();
@@ -404,7 +421,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         {
             Id = Guid.NewGuid(),
             CrackmeId = crackme.Id,
-            AuthorUserId = Guid.Parse(User.FindFirstValue("uid")!),
+            AuthorUserId = User.UserId(),
             AnonymousHandle = User.Identity?.Name ?? AppConstants.AnonymousHandle,
             Body = body,
             IsSpoiler = req.IsSpoiler,
@@ -417,7 +434,10 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         {
             await Notifier.NotifyAsync(db, crackme.UploaderUserId, NotificationType.CommentOnYourCrackme,
                 $"New comment on '{crackme.Title}'", null, $"/challenge/{crackme.Slug}#comment-{comment.Id}",
-                Guid.Parse(User.FindFirstValue("uid")!), crackme.Id, ct);
+                User.UserId(), crackme.Id, ct);
+            // @mentions ping their targets too; the owner already got the comment notification above.
+            await Mentions.NotifyAsync(db, body, comment.AnonymousHandle!, comment.AuthorUserId,
+                $"/challenge/{crackme.Slug}#comment-{comment.Id}", crackme.Id, [crackme.UploaderUserId], ct);
         }
         catch { }
         var authorHandle = await db.Users.AsNoTracking()
@@ -443,7 +463,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var c = await db.Comments.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct);
         if (c is null)
             return NotFound();
-        if (c.AuthorUserId != CurrentUserId())
+        if (c.AuthorUserId != User.UserIdOrNull())
             return Forbid();
 
         if (c.Body != body)
@@ -467,7 +487,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var c = await db.Comments.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (c is null)
             return NotFound();
-        if (c.AuthorUserId != CurrentUserId())
+        if (c.AuthorUserId != User.UserIdOrNull())
             return Forbid();
         c.IsDeleted = true;
         c.UpdatedAt = DateTime.UtcNow;
@@ -499,7 +519,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (id is null)
             return NotFound();
 
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         var rating = await db.Ratings.AsNoTracking().FirstOrDefaultAsync(r => r.CrackmeId == id && r.VoterUserId == uid, ct);
         return Ok(new MyRating(rating?.Difficulty, rating?.Quality));
     }
@@ -517,7 +537,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         if (crackme is null)
             return NotFound();
 
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         var rating = await db.Ratings.FirstOrDefaultAsync(r => r.CrackmeId == crackme.Id && r.VoterUserId == uid, ct);
         var now = DateTime.UtcNow;
 
@@ -568,7 +588,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             return NotFound();
 
         // One open report per reporter per crackme — silently no-op on repeats so the queue can't be spammed.
-        var uid = CurrentUserId();
+        var uid = User.UserIdOrNull();
         var ip = HttpContext.GetClientIp();
         var already = uid is not null
             ? await db.Reports.AsNoTracking().AnyAsync(r => r.CrackmeId == id && !r.IsResolved && r.ReporterUserId == uid, ct)
@@ -601,7 +621,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var c = await db.Crackmes.FirstOrDefaultAsync(x => x.Slug == slug, ct);
         if (c is null)
             return NotFound();
-        if (c.UploaderUserId != CurrentUserId()
+        if (c.UploaderUserId != User.UserIdOrNull()
             && !User.IsInRole(nameof(UserRole.Moderator)) && !User.IsInRole(nameof(UserRole.Admin)))
             return Forbid();
 
@@ -628,7 +648,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
             .OrderByDescending(s => s.IsAuthorPick).ThenByDescending(s => s.UpvoteCount).ThenBy(s => s.CreatedAt)
             .ToListAsync(ct);
 
-        var uid = CurrentUserId();
+        var uid = User.UserIdOrNull();
         var myUp = new HashSet<Guid>();
         var myHelped = new HashSet<Guid>();
         var solvedThis = false;
@@ -664,7 +684,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var s = await db.Solutions.FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
         if (s is null)
             return NotFound();
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         if (s.AuthorUserId == uid)
             return BadRequest("You can't upvote your own writeup.");
 
@@ -697,7 +717,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var s = await db.Solutions.FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
         if (s is null)
             return NotFound();
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
         if (s.AuthorUserId == uid)
             return BadRequest("You can't mark your own writeup.");
         // Solver-gated: only people who actually solved this crackme can vouch that a writeup helped.
@@ -734,7 +754,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var s = await db.Solutions.Include(x => x.Crackme).FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
         if (s is null)
             return NotFound();
-        if (s.Crackme.UploaderUserId != CurrentUserId() && !User.IsInRole(nameof(UserRole.Admin)))
+        if (s.Crackme.UploaderUserId != User.UserIdOrNull() && !User.IsInRole(nameof(UserRole.Admin)))
             return Forbid();
 
         if (s.IsAuthorPick)
@@ -777,7 +797,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         {
             Id = id,
             CrackmeId = crackme.Id,
-            AuthorUserId = Guid.Parse(User.FindFirstValue("uid")!),
+            AuthorUserId = User.UserId(),
             AnonymousHandle = User.Identity?.Name ?? AppConstants.AnonymousHandle,
             Title = string.IsNullOrWhiteSpace(form.Title) ? null : form.Title.Trim(),
             BodyMarkdown = body,
@@ -834,7 +854,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         {
             await Notifier.NotifyAsync(db, crackme.UploaderUserId, NotificationType.WriteupOnYourCrackme,
                 $"New writeup on '{crackme.Title}'", null, $"/challenge/{crackme.Slug}#writeup-{solution.Id}",
-                Guid.Parse(User.FindFirstValue("uid")!), crackme.Id, ct);
+                User.UserId(), crackme.Id, ct);
         }
         catch { }
         return Accepted(new WriteupResponse(id, "pending"));
@@ -856,7 +876,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var s = await db.Solutions.FirstOrDefaultAsync(x => x.Id == id && x.Status == SolutionStatus.Approved, ct);
         if (s is null)
             return NotFound();
-        if (s.AuthorUserId != CurrentUserId())
+        if (s.AuthorUserId != User.UserIdOrNull())
             return Forbid();
         s.Title = string.IsNullOrWhiteSpace(req.Title) ? null : req.Title.Trim();
         s.BodyMarkdown = body;
@@ -875,7 +895,7 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         var s = await db.Solutions.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s is null)
             return NotFound();
-        if (s.AuthorUserId != CurrentUserId())
+        if (s.AuthorUserId != User.UserIdOrNull())
             return Forbid();
         s.Status = SolutionStatus.Deleted;
         s.UpdatedAt = DateTime.UtcNow;
@@ -973,9 +993,6 @@ public sealed class CrackmesController(IServiceScopeFactory scopeFactory, BlobSt
         Reactions: new Dictionary<string, int>(), MyReactions: [],
         Status: CrackmeStatus.TakenDown, TakedownReason: c.TakedownReason, TakenDownAt: c.TakenDownAt,
         SolvedByMe: false, AuthorHandle: authorHandle, VerificationKind: VerificationKind.None);
-
-    private Guid? CurrentUserId() =>
-        User.Identity?.IsAuthenticated == true && Guid.TryParse(User.FindFirstValue("uid"), out var id) ? id : null;
 
     private static List<string> EnabledProtections(Crackme c) =>
         c.ProtectionsApplied.Where(p => p.Enabled).Select(p => p.Name).ToList();

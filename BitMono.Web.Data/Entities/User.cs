@@ -21,6 +21,12 @@ public class User
     public UserRole Role { get; set; } = UserRole.User;
     public bool IsBanned { get; set; }
 
+    // Free-text profile blurb, shown on /user/{handle}. Moderators can soft-hide it (kept for the
+    // owner to fix); editing the bio clears the hide so the new text goes live again.
+    [MaxLength(500)] public string? Bio { get; set; }
+    public bool BioHidden { get; set; }
+    [MaxLength(500)] public string? BioHiddenReason { get; set; }
+
     // Denormalized cumulative score — sum of Solve.PointsAwarded, bumped atomically on each solve.
     public int Points { get; set; }
 

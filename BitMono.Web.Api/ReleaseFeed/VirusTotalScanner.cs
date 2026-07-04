@@ -51,8 +51,8 @@ public sealed class VirusTotalScanner(
         // Work list: never scanned, still pending (analysis queued — re-check), or a stale "done" verdict.
         var todo = assets
             .Where(a => !existing.TryGetValue(a.Sha256!, out var e)
-                        || e.Status == "pending"
-                        || (e.Status == "done" && now - e.UpdatedAt > Refresh))
+                        || e.Status == ScanStatus.Pending
+                        || (e.Status == ScanStatus.Done && now - e.UpdatedAt > Refresh))
             .Take(BatchPerRun)
             .ToList();
         if (todo.Count == 0)
@@ -84,7 +84,7 @@ public sealed class VirusTotalScanner(
                 var flagged = stats.GetValueOrDefault("malicious") + stats.GetValueOrDefault("suspicious");
                 var total = stats.Values.Sum();
                 // total == 0 → VT knows the file but analysis is still queued; stay pending, re-check later.
-                await UpsertAsync(sha, total > 0 ? "done" : "pending", flagged, total, ct);
+                await UpsertAsync(sha, total > 0 ? ScanStatus.Done : ScanStatus.Pending, flagged, total, ct);
                 return true;
             }
 
@@ -94,9 +94,16 @@ public sealed class VirusTotalScanner(
                 return true;
             }
 
-            // Unknown to VT → upload the bytes so it produces a real by-hash report. Skip over-cap files.
+            // Unknown to VT → upload the bytes so it produces a real by-hash report. Files over VT's 32 MB
+            // standard-upload cap can't be uploaded, so record a terminal "skipped" and move on. Recording it
+            // (rather than a bare return) is load-bearing: the work list picks the first not-yet-terminal asset
+            // each run, so an over-cap file with no row stays first forever and head-of-line-blocks every asset
+            // behind it. The page falls back to the SHA-256 + hash-search link for "skipped", same as unscanned.
             if (size > MaxUploadBytes)
+            {
+                await UpsertAsync(sha, ScanStatus.Skipped, 0, 0, ct);
                 return true;
+            }
 
             byte[] bytes;
             try { bytes = await gh.GetByteArrayAsync(url, ct); }
@@ -109,7 +116,7 @@ public sealed class VirusTotalScanner(
                 return false;
             if (!post.IsSuccessStatusCode)
                 logger.LogWarning("VirusTotal upload for {Sha} returned {Status}", sha, post.StatusCode);
-            await UpsertAsync(sha, "pending", 0, 0, ct);
+            await UpsertAsync(sha, ScanStatus.Pending, 0, 0, ct);
         }
         catch (Exception ex)
         {
@@ -118,14 +125,17 @@ public sealed class VirusTotalScanner(
         return true;
     }
 
-    private async Task UpsertAsync(string sha, string status, int flagged, int total, CancellationToken ct)
+    // The ON CONFLICT upsert is raw SQL, which bypasses EF's enum-to-int value conversion — so write the
+    // int form ourselves ({status0}). It must match how EF reads the int-backed Status column back.
+    private async Task UpsertAsync(string sha, ScanStatus status, int flagged, int total, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
+        var status0 = (int)status;
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO "ReleaseScans" ("Sha256", "Status", "Flagged", "Total", "UpdatedAt")
-            VALUES ({sha}, {status}, {flagged}, {total}, {now})
+            VALUES ({sha}, {status0}, {flagged}, {total}, {now})
             ON CONFLICT ("Sha256") DO UPDATE SET
-                "Status" = {status}, "Flagged" = {flagged}, "Total" = {total}, "UpdatedAt" = {now}
+                "Status" = {status0}, "Flagged" = {flagged}, "Total" = {total}, "UpdatedAt" = {now}
             """, ct);
     }
 

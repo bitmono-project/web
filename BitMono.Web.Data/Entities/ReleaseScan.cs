@@ -8,7 +8,7 @@ namespace BitMono.Web.Data.Entities;
 public class ReleaseScan
 {
     [Key, MaxLength(64)] public string Sha256 { get; set; } = null!;
-    [MaxLength(16)] public string Status { get; set; } = "pending";   // pending | done
+    public ScanStatus Status { get; set; } = ScanStatus.Pending;
     public int Flagged { get; set; }   // malicious + suspicious engine hits
     public int Total { get; set; }     // engines that returned a verdict
     public DateTime UpdatedAt { get; set; }

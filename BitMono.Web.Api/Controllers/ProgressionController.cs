@@ -1,4 +1,4 @@
-using System.Security.Claims;
+using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Progression;
 using BitMono.Web.Data;
@@ -78,7 +78,7 @@ public sealed class ProgressionController(IServiceScopeFactory scopeFactory) : C
     {
         await using var s = scopeFactory.CreateAsyncScope();
         var db = s.ServiceProvider.GetRequiredService<CrackmesDbContext>();
-        var uid = Guid.Parse(User.FindFirstValue("uid")!);
+        var uid = User.UserId();
 
         var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == uid, ct);
         if (u is null)

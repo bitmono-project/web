@@ -14,6 +14,7 @@ import {
 import { type Me, isAdmin, isModerator, useAuth } from '../lib/auth'
 import { PromptDialog, ConfirmDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS, REJECT_PRESETS } from '../components/PromptDialog'
 import { ImageGallery } from '../components/ImageGallery'
+import { MentionText } from '../components/MentionText'
 import { Turnstile } from '../components/Turnstile'
 import { Tooltip } from '../components/Tooltip'
 import { getConfig } from '../lib/config'
@@ -120,7 +121,7 @@ export default function CrackmeDetail() {
       {c.description && (
         <div className="mt-8">
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-faint">Description</div>
-          <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-ink/90">{c.description}</p>
+          <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-ink/90"><MentionText text={c.description} /></p>
         </div>
       )}
 
@@ -623,7 +624,7 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
                 ) : cm.isSpoiler && !revealed.has(cm.id) ? (
                   <button onClick={() => setRevealed((s) => new Set(s).add(cm.id))} className="mt-1 font-mono text-[13px] text-acid hover:underline">[spoiler — click to reveal]</button>
                 ) : (
-                  <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{cm.body}</p>
+                  <p className="mt-1 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90"><MentionText text={cm.body} /></p>
                 )}
                 {history[cm.id] && (
                   <div className="mt-2 space-y-1 rounded border border-line bg-void/40 p-2">
@@ -654,7 +655,7 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
             className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
             rows={3}
             maxLength={4000}
-            placeholder="Stay polite — don’t spoil the solution (or mark it as a spoiler)."
+            placeholder="Stay polite — don’t spoil the solution (or mark it as a spoiler). @handle mentions someone."
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onFocus={() => setCommenting(true)}
@@ -842,7 +843,7 @@ function WriteupsPanel({ slug, me, isOwner, zipPassword, turnstileSiteKey }: { s
               </div>
             ) : revealed.has(w.id) ? (
               <>
-                <p className="mt-2 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90">{w.bodyMarkdown}</p>
+                <p className="mt-2 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink/90"><MentionText text={w.bodyMarkdown} /></p>
                 {w.imageCount > 0 && <ImageGallery urls={Array.from({ length: w.imageCount }, (_, i) => writeupImageUrl(slug, w.id, i))} />}
                 {w.hasAttachment && (
                   <a href={writeupAttachmentUrl(slug, w.id)} className="mt-3 inline-block font-mono text-[12px] text-acid hover:underline">

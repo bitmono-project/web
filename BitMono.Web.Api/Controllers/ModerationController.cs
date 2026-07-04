@@ -1,6 +1,6 @@
-using System.Security.Claims;
 using BitMono.Web.Api.Auth;
 using BitMono.Web.Api.Badges;
+using BitMono.Web.Api.Helpers;
 using BitMono.Web.Api.Models;
 using BitMono.Web.Api.Notifications;
 using BitMono.Web.Api.Progression;
@@ -100,7 +100,7 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             TargetType = ModeratableType.Crackme,
             TargetId = c.Id,
             CrackmeId = c.Id,
-            ReviewerId = Guid.Parse(User.FindFirstValue("uid")!),
+            ReviewerId = User.UserId(),
             Verdict = ModerationVerdict.TakenDown,
             TakedownReason = reason,
             IsTakedown = true,
@@ -111,7 +111,7 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
         {
             await Notifier.NotifyAsync(db, c.UploaderUserId, NotificationType.TakenDown,
                 $"'{c.Title}' was taken down", reason, "/submissions",
-                Guid.Parse(User.FindFirstValue("uid")!), c.Id, ct);
+                User.UserId(), c.Id, ct);
         }
         catch { }
         return NoContent();
@@ -147,7 +147,7 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             TargetType = ModeratableType.Crackme,
             TargetId = c.Id,
             CrackmeId = c.Id,
-            ReviewerId = Guid.Parse(User.FindFirstValue("uid")!),
+            ReviewerId = User.UserId(),
             Verdict = ModerationVerdict.Restored,
             PublicMessage = reason,
             IsTakedown = false,
@@ -236,6 +236,14 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
                     await BadgeService.TryAwardAsync(db, author, BadgeService.Professor, ct);
             }
             catch { }
+            // @mentions fire only now that the writeup is public. The crackme owner already got
+            // WriteupOnYourCrackme at submission time, so they're excluded here.
+            try
+            {
+                await Mentions.NotifyAsync(db, s.BodyMarkdown, s.AnonymousHandle ?? AppConstants.AnonymousHandle,
+                    author, $"/challenge/{s.Crackme.Slug}#writeup-{s.Id}", s.CrackmeId, [s.Crackme.UploaderUserId], ct);
+            }
+            catch { }
         }
         return NoContent();
     }
@@ -259,11 +267,11 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
-        return await db.Reports.AsNoTracking()
-            .Where(r => !r.IsResolved && r.CrackmeId != null)
-            .OrderBy(r => r.CreatedAt)
+
+        var crackmes = await db.Reports.AsNoTracking()
+            .Where(r => !r.IsResolved && r.TargetType != ModeratableType.UserProfile && r.CrackmeId != null)
             .Select(r => new PendingReport(
-                r.Id, r.Crackme!.Slug, r.Crackme.Title, r.Reason, r.Details,
+                r.Id, ModeratableType.Crackme, r.Crackme!.Slug, r.Crackme.Title, null, null, r.Reason, r.Details,
                 r.ReporterUserId == null
                     ? (r.ReporterIp ?? AppConstants.AnonymousHandle)
                     : (db.Users.Where(u => u.Id == r.ReporterUserId).Select(u => u.DisplayName).FirstOrDefault() ?? AppConstants.AnonymousHandle),
@@ -272,6 +280,71 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
                     : db.Users.Where(u => u.Id == r.ReporterUserId).Select(u => u.Handle).FirstOrDefault(),
                 r.CreatedAt))
             .ToListAsync(ct);
+
+        var profiles = await db.Reports.AsNoTracking()
+            .Where(r => !r.IsResolved && r.TargetType == ModeratableType.UserProfile)
+            .Select(r => new PendingReport(
+                r.Id, ModeratableType.UserProfile, null, null,
+                db.Users.Where(u => u.Id == r.TargetId).Select(u => u.Handle).FirstOrDefault(),
+                db.Users.Where(u => u.Id == r.TargetId).Select(u => u.DisplayName).FirstOrDefault(),
+                r.Reason, r.Details,
+                r.ReporterUserId == null
+                    ? (r.ReporterIp ?? AppConstants.AnonymousHandle)
+                    : (db.Users.Where(u => u.Id == r.ReporterUserId).Select(u => u.DisplayName).FirstOrDefault() ?? AppConstants.AnonymousHandle),
+                r.ReporterUserId == null
+                    ? null
+                    : db.Users.Where(u => u.Id == r.ReporterUserId).Select(u => u.Handle).FirstOrDefault(),
+                r.CreatedAt))
+            .ToListAsync(ct);
+
+        return crackmes.Concat(profiles).OrderBy(r => r.CreatedAt).ToList();
+    }
+
+    // Hide / unhide a user's profile bio (toggle). Hiding needs a reason and notifies the user; the
+    // text is kept so the owner can fix it — editing the bio clears the hide.
+    [HttpPost("users/{id:guid}/bio-hide")]
+    public async Task<IActionResult> ToggleBioHide(Guid id, [FromBody] BioHideRequest? req, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrackmesDbContext>();
+        var u = await db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (u is null)
+            return NotFound();
+
+        var actor = User.UserId();
+        if (u.BioHidden)
+        {
+            u.BioHidden = false;
+            u.BioHiddenReason = null;
+            await db.SaveChangesAsync(ct);
+            try
+            {
+                await Notifier.NotifyAsync(db, u.Id, NotificationType.ProfileBioHidden,
+                    "Your profile bio is visible again", "A moderator restored it.", $"/user/{u.Handle}", actor, null, ct);
+            }
+            catch { }
+            return Ok(new { bioHidden = false });
+        }
+
+        if (string.IsNullOrEmpty(u.Bio))
+            return BadRequest("This user has no bio to hide.");
+        var reason = req?.Reason?.Trim();
+        if (string.IsNullOrEmpty(reason))
+            return BadRequest("A reason is required.");
+        if (reason.Length > 500)
+            reason = reason[..500];
+
+        u.BioHidden = true;
+        u.BioHiddenReason = reason;
+        await db.SaveChangesAsync(ct);
+        try
+        {
+            await Notifier.NotifyAsync(db, u.Id, NotificationType.ProfileBioHidden,
+                "Your profile bio was hidden by a moderator",
+                $"{reason} — edit your bio to publish a fixed version.", $"/user/{u.Handle}", actor, null, ct);
+        }
+        catch { }
+        return Ok(new { bioHidden = true });
     }
 
     [HttpPost("reports/{id:guid}/resolve")]
@@ -283,7 +356,7 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
         if (r is null)
             return NotFound();
         r.IsResolved = true;
-        r.ResolvedByUserId = Guid.Parse(User.FindFirstValue("uid")!);
+        r.ResolvedByUserId = User.UserId();
         r.ResolvedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return NoContent();
@@ -453,14 +526,14 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
             TargetType = ModeratableType.Crackme,
             TargetId = c.Id,
             CrackmeId = c.Id,
-            ReviewerId = Guid.Parse(User.FindFirstValue("uid")!),
+            ReviewerId = User.UserId(),
             Verdict = approve ? ModerationVerdict.Approved : ModerationVerdict.Disallowed,
             PublicMessage = message,
             CreatedAt = now,
         });
         await db.SaveChangesAsync(ct);
 
-        var actor = Guid.Parse(User.FindFirstValue("uid")!);
+        var actor = User.UserId();
         try
         {
             if (approve)
@@ -474,7 +547,16 @@ public sealed class ModerationController(IServiceScopeFactory scopeFactory, Blob
 
         // Announce first-time publishes (not re-approvals) to Discord off the request path.
         if (firstPublish)
+        {
             try { BackgroundJob.Enqueue<DiscordWebhook>(d => d.ChallengePublishedAsync(c.Id, CancellationToken.None)); } catch { }
+            // @mentions in the description fire once, when it first goes public.
+            try
+            {
+                await Mentions.NotifyAsync(db, c.Description, c.AnonymousHandle ?? AppConstants.AnonymousHandle,
+                    c.UploaderUserId, $"/challenge/{c.Slug}", c.Id, [], ct);
+            }
+            catch { }
+        }
 
         if (approve && c.UploaderUserId is { } author)
         {

@@ -14,6 +14,7 @@ export const ru: Dict = {
     login: 'вход',
     logout: 'выход',
     notifications: 'Уведомления',
+    search: 'Поиск',
     language: 'Язык',
   },
   blog: {
