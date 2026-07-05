@@ -14,10 +14,16 @@ public static class Scoring
     private static readonly int[] Base = [50, 100, 200, 350, 550, 800]; // VeryEasy..Insane
 
     // Community average once rated, else the author's claim. Clamped 1..6.
-    public static int EffectiveDifficulty(Crackme c) =>
-        c.DifficultyCount > 0
-            ? Math.Clamp((int)Math.Round((double)c.DifficultySum / c.DifficultyCount), 1, 6)
-            : Math.Clamp((int)c.AuthorDifficulty, 1, 6);
+    public static int EffectiveDifficulty(int difficultySum, int difficultyCount, Difficulty author) =>
+        difficultyCount > 0
+            ? Math.Clamp((int)Math.Round((double)difficultySum / difficultyCount), 1, 6)
+            : Math.Clamp((int)author, 1, 6);
+
+    public static int EffectiveDifficulty(Crackme c) => EffectiveDifficulty(c.DifficultySum, c.DifficultyCount, c.AuthorDifficulty);
+
+    // The most any single solver could earn on a challenge (first solver + first blood, no decay).
+    // Summed over all public crackmes it's the "100% completion" ceiling WeChall wants as maxscore.
+    public static int MaxPointsFor(int effectiveDifficulty) => PointsFor(effectiveDifficulty, 0, firstBlood: true);
 
     // 1.0 for the first solver, asymptotically → 0.30 as more people solve it.
     public static double Decay(int priorSolvers) => 0.30 + 0.70 / (1 + priorSolvers / 8.0);
