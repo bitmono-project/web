@@ -3,9 +3,13 @@ import { Tooltip } from '../components/Tooltip'
 import { useTitle } from '../lib/useTitle'
 import {
   getReleases, detectOs, formatSize, shortSha, uniq,
-  OS_LABEL, ARCH_LABEL, OS_ORDER, ARCH_ORDER, TFMS, RECOMMENDED_TFM, tfmLabel, tfmChip,
+  OS_LABEL, ARCH_LABEL, OS_ORDER, ARCH_ORDER, TFMS, RECOMMENDED_TFM, tfmLabel, tfmChip, isLibTfm,
   type Release, type ReleaseAsset, type Os, type Arch,
 } from '../lib/releases'
+
+// One-liner the netstandard chips + library card share, so the "it's a library, not a tool" message
+// is worded identically everywhere. The exact phrase ("no executable") mirrors issue #272.
+const LIB_NOTE = 'A class library for building a custom BitMono engine or a plugin — not an obfuscator. No executable inside; to protect an app, pick a runnable runtime like .NET 8.'
 
 const d = (ms: number): CSSProperties => ({ ['--d' as string]: `${ms}ms` } as CSSProperties)
 const order = <T,>(xs: T[], by: T[]): T[] => by.filter((v) => xs.includes(v))
@@ -56,7 +60,15 @@ export default function Download() {
   // Clamp every selection to something that actually resolves, so the download card is never a dead end:
   // pick the recommended/first available at each level, falling back down the chain.
   const cliTfms = TFMS.map((t) => t.id).filter((id) => cli.some((a) => a.tfm === id))
-  const curTfm = cliTfms.includes(tfm) ? tfm : cliTfms.includes(RECOMMENDED_TFM) ? RECOMMENDED_TFM : (cliTfms[0] ?? '')
+  // Auto-selection must never land on a netstandard (library) build — only an explicit click / shared
+  // link does. So the final fallback is the first *runnable* TFM, not just cliTfms[0] (issue #272).
+  const runnableTfms = cliTfms.filter((id) => !isLibTfm(id))
+  const curTfm = cliTfms.includes(tfm) ? tfm
+    : cliTfms.includes(RECOMMENDED_TFM) ? RECOMMENDED_TFM
+    : (runnableTfms[0] ?? cliTfms[0] ?? '')
+  const isLib = isLibTfm(curTfm)
+  // Where "switch to a runnable build" sends you: net8.0 if present, else the first runnable TFM.
+  const switchTfm = cliTfms.includes(RECOMMENDED_TFM) ? RECOMMENDED_TFM : (runnableTfms[0] ?? '')
   const cliOss = order(uniq(cli.filter((a) => a.tfm === curTfm).map((a) => a.os as Os)), OS_ORDER)
   const curOs = cliOss.includes(os) ? os : (cliOss[0] ?? 'win')
   const cliArchs = order(uniq(cli.filter((a) => a.tfm === curTfm && a.os === curOs).map((a) => a.arch as Arch)), ARCH_ORDER)
@@ -73,7 +85,9 @@ export default function Download() {
   useEffect(() => {
     if (!rel) return
     const p = new URLSearchParams({ v: rel.version, path })
-    if (path === 'cli' && curTfm) { p.set('tfm', curTfm); p.set('os', curOs); p.set('arch', curArch) }
+    // A library build has no OS/arch — writing them would produce a dead link. Emit tfm only.
+    if (path === 'cli' && curTfm && isLib) p.set('tfm', curTfm)
+    else if (path === 'cli' && curTfm) { p.set('tfm', curTfm); p.set('os', curOs); p.set('arch', curArch) }
     if (path === 'unity' && curMajor) { p.set('unity', curMajor); p.set('format', unityFormat) }
     history.replaceState(null, '', `${location.pathname}?${p}${location.hash}`)
   }, [rel, path, curTfm, curOs, curArch, curMajor, unityFormat])
@@ -166,20 +180,30 @@ export default function Download() {
         {path === 'cli' && (
           <div className="space-y-5">
             <div>
-              <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-faint">Runtime you'll run it on</div>
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-faint">Runtime you'll run it on</span>
+                {cliTfms.length > 0 && <HelpMeChoose switchTfm={switchTfm} libTfm={cliTfms.find(isLibTfm) ?? null} onPick={setTfm} />}
+              </div>
+              <p className="mb-2.5 font-mono text-[11px] leading-relaxed text-faint">
+                Match the .NET your app runs on. The <span className="text-muted">netstd</span> builds are libraries for
+                extending BitMono — not obfuscators.
+              </p>
               {cliTfms.length === 0 ? (
                 <Skeleton />
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   {cliTfms.map((id) => (
-                    <Chip key={id} on={id === curTfm} onClick={() => setTfm(id)} title={tfmLabel(id)} trace={1}>
-                      {tfmChip(id)}{id === RECOMMENDED_TFM ? <span className="ml-1 text-[9px] text-acid/80">LTS</span> : null}
+                    <Chip key={id} on={id === curTfm} onClick={() => setTfm(id)} title={isLibTfm(id) ? LIB_NOTE : tfmLabel(id)} trace={1}>
+                      {tfmChip(id)}
+                      {id === RECOMMENDED_TFM ? <span className="ml-1 text-[9px] text-acid/80">LTS</span> : null}
+                      {isLibTfm(id) ? <span className="ml-1 text-[10px] text-faint">ⓘ</span> : null}
                     </Chip>
                   ))}
                 </div>
               )}
 
-              {cliTfms.length > 0 && (!showOsArch ? (
+              {/* OS/arch only apply to a runnable build — a library has neither. */}
+              {cliTfms.length > 0 && !isLib && (!showOsArch ? (
                 <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[12px] text-faint">
                   <span className="h-1.5 w-1.5 rounded-full bg-acid/70" />
                   detected:&nbsp;<span className="text-muted">{OS_LABEL[curOs]} · {ARCH_LABEL[curArch]}</span>
@@ -197,11 +221,12 @@ export default function Download() {
               ))}
             </div>
 
-            {cliAsset ? <DownloadCard asset={cliAsset} /> : cliTfms.length > 0 ? (
+            {cliAsset ? <DownloadCard asset={cliAsset} library={isLib ? { switchLabel: tfmChip(switchTfm), onSwitch: () => setTfm(switchTfm) } : undefined} /> : cliTfms.length > 0 ? (
               <p className="font-mono text-[12px] text-muted">No build for that combination — try x64.</p>
             ) : null}
 
-            {cliTfms.length > 0 && (
+            {/* The dotnet-tool one-liner runs the obfuscator — irrelevant for a library build. */}
+            {cliTfms.length > 0 && !isLib && (
               <div className="space-y-2">
                 <div className="font-mono text-[11px] text-faint">Prefer a one-liner? Install as a .NET global tool —</div>
                 <CommandBox cmd="dotnet tool install --global BitMono.GlobalTool" />
@@ -341,21 +366,27 @@ function ChipRow({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function DownloadCard({ asset }: { asset: ReleaseAsset }) {
+// library (set only for a netstandard build): reframes the card as "a library, not a tool" — the
+// switch action jumps to a runnable runtime, and the literal download is demoted to a quiet link so
+// the plugin/engine authors who genuinely want the .dll can still grab it. (issue #272)
+function DownloadCard({ asset, library }: { asset: ReleaseAsset; library?: { switchLabel: string; onSwitch: () => void } }) {
   const [copied, setCopied] = useState<'sha' | 'link' | null>(null)
   const copy = (what: 'sha' | 'link', text: string) => {
     navigator.clipboard?.writeText(text).then(() => { setCopied(what); setTimeout(() => setCopied(null), 1500) }).catch(() => {})
   }
-  const meta = asset.kind === 'cli'
-    ? `${tfmLabel(asset.tfm ?? '')} · ${OS_LABEL[asset.os as Os]} · ${ARCH_LABEL[asset.arch as Arch]}`
-    : `Unity ${asset.unityVersion} · ${asset.format === 'upm' ? 'UPM package' : '.unitypackage'}`
+  const meta = asset.kind !== 'cli'
+    ? `Unity ${asset.unityVersion} · ${asset.format === 'upm' ? 'UPM package' : '.unitypackage'}`
+    : library
+      ? `${tfmLabel(asset.tfm ?? '')} · class library`
+      : `${tfmLabel(asset.tfm ?? '')} · ${OS_LABEL[asset.os as Os]} · ${ARCH_LABEL[asset.arch as Arch]}`
 
   return (
     // id="download": shared links carry #download so the target lock lands on this exact build.
-    <div id="download" className="relative overflow-hidden rounded-2xl border border-acid/30 bg-surface/40 p-6">
+    <div id="download" className={`relative overflow-hidden rounded-2xl border bg-surface/40 p-6 ${library ? 'border-amber-400/40' : 'border-acid/30'}`}>
       <Corners />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
+          {library && <div className="mb-1 font-mono text-[11px] font-bold uppercase tracking-wider text-amber-400">⚑ library · no executable</div>}
           <Tooltip label={asset.name} className="max-w-full">
             <span className="min-w-0 truncate font-mono text-sm text-ink">{asset.name}</span>
           </Tooltip>
@@ -364,8 +395,23 @@ function DownloadCard({ asset }: { asset: ReleaseAsset }) {
             {asset.downloads > 0 && <span className="text-faint"> · {asset.downloads.toLocaleString()} downloads</span>}
           </div>
         </div>
-        <a href={asset.downloadUrl} download className="btn-acid shrink-0">Download ↓</a>
+        {library ? (
+          <button onClick={library.onSwitch} className="btn-acid shrink-0">switch to {library.switchLabel} →</button>
+        ) : (
+          <a href={asset.downloadUrl} download className="btn-acid shrink-0">Download ↓</a>
+        )}
       </div>
+
+      {library && (
+        <p className="mt-4 flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 font-mono text-[12px] leading-relaxed text-amber-200/90">
+          <span aria-hidden>⚙</span>
+          <span>
+            {LIB_NOTE}{' '}
+            <a href={asset.downloadUrl} download className="whitespace-nowrap text-faint transition-colors hover:text-amber-300">still want the library? download it anyway ↓</a>
+          </span>
+        </p>
+      )}
+
       {asset.sha256 && (
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 font-mono text-[11px]">
           <span className="text-faint">sha256</span>
@@ -373,15 +419,58 @@ function DownloadCard({ asset }: { asset: ReleaseAsset }) {
           <button onClick={() => copy('sha', asset.sha256 as string)} className="text-faint transition-colors hover:text-acid">
             {copied === 'sha' ? '✓ copied' : '⧉ copy'}
           </button>
-          <button onClick={() => copy('link', `${location.origin}${location.pathname}${location.search}#download`)}
-            title="Copy a link to this exact build — version, runtime, OS and arch included"
-            className="text-faint transition-colors hover:text-acid">
-            {copied === 'link' ? '✓ copied' : '⧉ share'}
-          </button>
+          <Tooltip label="Copy a link to this exact build — version, runtime, OS and arch included">
+            <button onClick={() => copy('link', `${location.origin}${location.pathname}${location.search}#download`)}
+              className="text-faint transition-colors hover:text-acid">
+              {copied === 'link' ? '✓ copied' : '⧉ share'}
+            </button>
+          </Tooltip>
           <VirusTotal asset={asset} />
         </div>
       )}
     </div>
+  )
+}
+
+// "help me choose" — the affordance the user asked for. A tiny popover: pick what you're doing and it
+// selects the right runtime, so nobody has to know net8.0 from netstandard. Mirrors VersionPicker's shell.
+function HelpMeChoose({ switchTfm, libTfm, onPick }: { switchTfm: string; libTfm: string | null; onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onEsc)
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onEsc) }
+  }, [open])
+
+  const pick = (id: string) => { onPick(id); setOpen(false) }
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen((o) => !o)} className="font-mono text-[11px] text-faint transition-colors hover:text-acid">
+        not sure? · help me choose →
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-line bg-void/95 p-1.5 text-left shadow-xl backdrop-blur">
+          <div className="px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider text-faint">What are you doing?</div>
+          <HelpOption title="Protecting my own app" sub="Obfuscate an .exe or .dll I built" onClick={() => pick(switchTfm)} />
+          {libTfm && <HelpOption title="Building on top of BitMono" sub="A plugin or my own engine (library)" onClick={() => pick(libTfm)} />}
+          <HelpOption title="Not sure what my app targets" sub="Check the .csproj <TargetFramework>, or take .NET 8" onClick={() => pick(switchTfm)} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function HelpOption({ title, sub, onClick }: { title: string; sub: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="block w-full rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface/50">
+      <div className="font-mono text-[12px] text-ink">→ {title}</div>
+      <div className="font-mono text-[11px] text-faint">{sub}</div>
+    </button>
   )
 }
 
