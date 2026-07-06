@@ -52,6 +52,7 @@ export async function startObfuscation(
   deps: File[] = [],
   signingKey: File | null = null,
   onProgress?: (pct: number) => void,
+  previewOptIn = false,
 ): Promise<string> {
   const id = crypto.randomUUID()
   // Each dependency is its own chunked upload under its own id; the finalize lists those ids. The
@@ -72,6 +73,7 @@ export async function startObfuscation(
   form.append('fileName', file.name)
   for (const p of protections) form.append('protections', p)
   form.append('agree', String(agree))
+  form.append('preview', String(previewOptIn))
   for (const depId of dependencyIds) form.append('dependencyIds', depId)
   if (signingKey) form.append('signingKey', signingKey)
   const fin = await fetch(`/obfuscate/chunks/${id}/finalize`, { method: 'POST', body: form })
@@ -87,6 +89,30 @@ export async function getStatus(id: string): Promise<JobStatus> {
 
 export function downloadUrl(id: string, name: string): string {
   return `/obfuscate/${id}/download?name=${encodeURIComponent(name)}`
+}
+
+// Opt-in before/after decompiler preview. outcome: ok (clean C#) | degraded (~nothing readable) |
+// defeated (the decompiler threw — errorType/errorMessage are the real exception). Mirrors DecompilePreview.
+export type DecompileOutcome = 'ok' | 'degraded' | 'defeated'
+export interface DecompilePreview {
+  before: string | null
+  outcome: DecompileOutcome
+  after: string | null
+  errorType: string | null
+  errorMessage: string | null
+  responsibleProtections: string[]
+  protectionsApplied: string[]
+}
+
+// null while the preview isn't ready yet (404) or the user didn't opt in.
+export async function getPreview(id: string): Promise<DecompilePreview | null> {
+  try {
+    const res = await fetch(`/obfuscate/${id}/preview`)
+    if (!res.ok) return null
+    return (await res.json()) as DecompilePreview
+  } catch {
+    return null
+  }
 }
 
 /** Polls until the job leaves "pending" or the timeout elapses. */

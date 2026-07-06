@@ -10,7 +10,7 @@ public sealed class ObfuscateJob(IObfuscationService obfuscator, FileStore store
     // Dependencies and the optional signing key were uploaded as their own inputs (each its own id);
     // we read them here and wipe every input — target, deps, key — in the finally.
     [AutomaticRetry(Attempts = 0)]
-    public async Task RunAsync(Guid id, string fileName, string[] protections, Guid[] dependencyIds, Guid? signingKeyId, CancellationToken ct)
+    public async Task RunAsync(Guid id, string fileName, string[] protections, Guid[] dependencyIds, Guid? signingKeyId, bool preview, CancellationToken ct)
     {
         try
         {
@@ -24,6 +24,18 @@ public sealed class ObfuscateJob(IObfuscationService obfuscator, FileStore store
 
             var output = await obfuscator.ObfuscateAsync(fileName, input, protections, dependencies, signingKey, ct);
             await store.SaveOutputAsync(id, output, ct);
+
+            // Opt-in only: decompile a sample of input + output here, the one moment both bytes exist
+            // (the input is wiped in the finally). Never fails the job — a broken preview is cosmetic.
+            if (preview)
+            {
+                try
+                {
+                    var json = DecompilerPreviewer.AnalyzeToJson(input, output, protections);
+                    await store.SavePreviewAsync(id, json, ct);
+                }
+                catch (Exception ex) { logger.LogWarning(ex, "Decompiler preview {Id} failed", id); }
+            }
         }
         catch (Exception ex)
         {

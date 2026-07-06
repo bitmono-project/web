@@ -20,6 +20,8 @@ public sealed class FileStore
     private string InputPath(Guid id) => Path.Combine(_in, id.ToString("N"));
     private string OutputPath(Guid id) => Path.Combine(_out, id.ToString("N"));
     private string FailedPath(Guid id) => Path.Combine(_out, id.ToString("N") + ".failed");
+    // The before/after decompiler preview JSON, in _out so the hourly sweep reaps it with the output.
+    private string PreviewPath(Guid id) => Path.Combine(_out, id.ToString("N") + ".preview");
 
     public async Task SaveInputAsync(Guid id, Stream content, CancellationToken ct)
     {
@@ -46,6 +48,11 @@ public sealed class FileStore
 
     public async Task<byte[]?> TryReadOutputAsync(Guid id, CancellationToken ct) =>
         File.Exists(OutputPath(id)) ? await File.ReadAllBytesAsync(OutputPath(id), ct) : null;
+
+    public Task SavePreviewAsync(Guid id, string json, CancellationToken ct) =>
+        File.WriteAllTextAsync(PreviewPath(id), json, ct);
+    public async Task<string?> TryReadPreviewAsync(Guid id, CancellationToken ct) =>
+        File.Exists(PreviewPath(id)) ? await File.ReadAllTextAsync(PreviewPath(id), ct) : null;
 
     public void MarkFailed(Guid id) => File.WriteAllText(FailedPath(id), string.Empty);
     public void DeleteInput(Guid id) => File.Delete(InputPath(id));

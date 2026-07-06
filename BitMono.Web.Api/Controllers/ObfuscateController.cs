@@ -29,7 +29,7 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
 
     [HttpPost]
     [EnableRateLimiting("obfuscate")]
-    public async Task<IActionResult> Upload(IFormFile file, [FromForm] string[] protections, [FromForm] bool agree, CancellationToken ct)
+    public async Task<IActionResult> Upload(IFormFile file, [FromForm] string[] protections, [FromForm] bool agree, [FromForm] bool preview, CancellationToken ct)
     {
         if (!agree)
             return BadRequest("You must confirm the assembly is yours to obfuscate and isn't malware.");
@@ -46,7 +46,7 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
 
         // Protections are validated/defaulted by the obfuscation-service (single source of truth).
         // Legacy single-shot path: no dependencies or signing key (the chunked finalize carries those).
-        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, file.FileName, selected, Array.Empty<Guid>(), (Guid?)null, CancellationToken.None));
+        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, file.FileName, selected, Array.Empty<Guid>(), (Guid?)null, preview, CancellationToken.None));
         return Accepted($"/obfuscate/{id}", new ObfuscateAcceptedResponse(id));
     }
 
@@ -76,6 +76,7 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
         [FromForm] string[] protections,
         [FromForm] bool agree,
         [FromForm] Guid[] dependencyIds,
+        [FromForm] bool preview,
         IFormFile? signingKey,
         CancellationToken ct)
     {
@@ -126,13 +127,22 @@ public sealed class ObfuscateController(FileStore store, IBackgroundJobClient jo
         }
 
         var selected = protections ?? [];
-        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, fileName, selected, deps, keyId, CancellationToken.None));
+        jobs.Enqueue<ObfuscateJob>(j => j.RunAsync(id, fileName, selected, deps, keyId, preview, CancellationToken.None));
         return Accepted($"/obfuscate/{id}", new ObfuscateAcceptedResponse(id));
     }
 
     [HttpGet("{id:guid}")]
     public IActionResult Status(Guid id) =>
         Ok(new ObfuscateStatusResponse(id, store.Status(id)));
+
+    // The opt-in before/after decompiler preview for a finished job (raw JSON as stored by the job).
+    // 404 until it exists — the client only polls this when the user consented and status is done.
+    [HttpGet("{id:guid}/preview")]
+    public async Task<IActionResult> Preview(Guid id, CancellationToken ct)
+    {
+        var json = await store.TryReadPreviewAsync(id, ct);
+        return json is null ? NotFound() : Content(json, "application/json");
+    }
 
     [HttpGet("{id:guid}/download")]
     public async Task<IActionResult> Download(Guid id, string? name, CancellationToken ct)

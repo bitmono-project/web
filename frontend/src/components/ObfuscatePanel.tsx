@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { startObfuscation, waitForResult, downloadUrl, getProtections, type ProtectionInfo } from '../lib/api'
 import { parseAssemblyRefs, missingRefs } from '../lib/peRefs'
+import { DecompilerReadout } from './DecompilerReadout'
+import { ConfirmDialog } from './PromptDialog'
 
 type Phase = 'idle' | 'ready' | 'working' | 'done' | 'error'
 
@@ -38,7 +40,10 @@ export function ObfuscatePanel() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [level, setLevel] = useState<string>(DEFAULT_LEVEL)
   const [agreed, setAgreed] = useState(false)
+  const [previewOptIn, setPreviewOptIn] = useState(false) // opt-in before/after decompiler reveal
+  const [confirmPublish, setConfirmPublish] = useState(false) // guard the publish-as-challenge misclick
   const [progress, setProgress] = useState<{ stage: 'uploading' | 'obfuscating'; pct: number }>({ stage: 'uploading', pct: 0 })
+  const navigate = useNavigate()
   const [deps, setDeps] = useState<File[]>([])
   const [signingKey, setSigningKey] = useState<File | null>(null)
   const [refs, setRefs] = useState<string[] | null>(null) // the main assembly's references, for gap detection
@@ -124,7 +129,7 @@ export function ObfuscatePanel() {
     setProgress({ stage: 'uploading', pct: 0 })
     setError('')
     try {
-      const id = await startObfuscation(file, [...selected], agreed, deps, signingKey, (pct) => setProgress({ stage: 'uploading', pct }))
+      const id = await startObfuscation(file, [...selected], agreed, deps, signingKey, (pct) => setProgress({ stage: 'uploading', pct }), previewOptIn)
       setProgress({ stage: 'obfuscating', pct: 100 })
       const status = await waitForResult(id)
       if (status === 'done') {
@@ -138,7 +143,7 @@ export function ObfuscatePanel() {
     } catch (e) {
       fail(e instanceof Error ? e.message : 'Something broke.')
     }
-  }, [file, selected, agreed, deps, signingKey])   // agreed MUST be here — without it run() sends a stale agree=false
+  }, [file, selected, agreed, deps, signingKey, previewOptIn])   // agreed/previewOptIn MUST be here — else run() sends stale values
 
   const reset = () => {
     setPhase('idle')
@@ -198,6 +203,7 @@ export function ObfuscatePanel() {
                   notice={notice}
                 />
                 <ProtectionPicker catalog={catalog} selected={selected} level={level} onLevel={applyLevel} onToggle={toggle} />
+                <PreviewConsent on={previewOptIn} onChange={setPreviewOptIn} />
                 <label className="flex items-start gap-2 text-left font-mono text-[11px] leading-snug text-muted">
                   <input type="checkbox" className="mt-0.5" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
                   <span>
@@ -218,16 +224,27 @@ export function ObfuscatePanel() {
                 <div className="font-mono text-sm text-acid">✓ protected · input wiped</div>
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <a href={downloadUrl(result.id, result.name)} className="btn-acid" download={result.name}>download ↓</a>
-                  {/* Carry the id, name and applied protections in the URL so the publish form is prefilled
-                      and survives the login round-trip (publish needs an account; obfuscating doesn't). */}
-                  <Link
-                    to={`/upload?fromObfuscation=${result.id}&name=${encodeURIComponent(result.name)}&protections=${encodeURIComponent([...selected].join(','))}`}
+                  {/* Publishing exposes the file publicly, so confirm first — a misclick here would put someone's
+                      code in the gallery. On confirm we navigate with the id/name/protections prefilled (and it
+                      survives the login round-trip, since publish needs an account but obfuscating doesn't). */}
+                  <button
+                    onClick={() => setConfirmPublish(true)}
                     className="rounded-full border border-line px-4 py-2 font-mono text-sm text-muted transition-colors hover:border-acid hover:text-acid"
                   >
                     publish as challenge →
-                  </Link>
+                  </button>
                 </div>
                 <p className="font-mono text-[11px] text-faint">share it for others to crack — enters the gallery after review</p>
+                <DecompilerReadout jobId={result.id} optedIn={previewOptIn} />
+                {confirmPublish && (
+                  <ConfirmDialog
+                    title="Publish as a challenge?"
+                    message="This puts your obfuscated file in the public crackmes gallery for anyone to download and try to crack (after a moderator reviews it). Only publish code you're happy to share — the plain download above stays private."
+                    confirmText="publish →"
+                    onConfirm={() => navigate(`/upload?fromObfuscation=${result.id}&name=${encodeURIComponent(result.name)}&protections=${encodeURIComponent([...selected].join(','))}`)}
+                    onCancel={() => setConfirmPublish(false)}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -351,6 +368,29 @@ function ExtrasSection({
       <input ref={keyRef} type="file" accept=".snk" hidden
         onChange={(e) => { onPickKey(e.target.files?.[0]); e.target.value = '' }} />
     </div>
+  )
+}
+
+// Opt-in, OFF by default: decompiling exposes the user's own source, so they must knowingly turn it on.
+// The copy states the privacy cost (in-memory, wiped) in the same breath as the value.
+function PreviewConsent({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${on ? 'border-acid/40 bg-acid/5' : 'border-line hover:border-acid/30'}`}
+    >
+      <span className={`mt-0.5 flex h-4 w-8 shrink-0 items-center rounded-full border px-0.5 transition-colors ${on ? 'justify-end border-acid bg-acid/20' : 'justify-start border-line'}`}>
+        <span className={`h-3 w-3 rounded-full transition-colors ${on ? 'bg-acid' : 'bg-faint'}`} />
+      </span>
+      <span className="min-w-0">
+        <span className="block font-mono text-[12px] font-bold uppercase tracking-wider text-ink">see it break</span>
+        <span className="mt-0.5 block font-mono text-[11px] leading-snug text-muted">
+          {on
+            ? 'After it’s done, we’ll show a decompiled sample — your code now vs. obfuscated. Sample only (~one type), decompiled in memory and wiped with your upload. Nothing kept.'
+            : 'Watch a decompiler read your code — before vs. after. Off by default: we decompile a small sample in memory, then wipe it with your file.'}
+        </span>
+      </span>
+    </button>
   )
 }
 
