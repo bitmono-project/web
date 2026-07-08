@@ -13,8 +13,9 @@ namespace BitMono.Web.Api.ReleaseFeed;
 // We UPLOAD the file bytes (POST /files) rather than submit the URL (POST /urls): a URL submission doesn't
 // reliably produce a by-hash file report, so GET /files/{sha} would 404 forever and every asset stayed
 // "pending". Uploading makes the file immediately known to VT (GET returns 200, then last_analysis_stats
-// populates once analysis finishes). Files over VT's 32 MB standard-upload cap are skipped (they keep the
-// SHA-256 + search fallback). ponytail: skip >32 MB rather than add the large-file upload dance.
+// populates once analysis finishes). Files over the 32 MB standard-upload cap (our net6/net7 win-x64 zips
+// run ~33 MB) go through VT's large-file flow: ask for a one-time upload URL, then POST there. Only files
+// over VT's 650 MB large-file ceiling stay terminally "skipped" (SHA-256 + search fallback).
 public sealed class VirusTotalScanner(
     IHttpClientFactory factory,
     CrackmesDbContext db,
@@ -24,6 +25,7 @@ public sealed class VirusTotalScanner(
 {
     private const int BatchPerRun = 1;                          // gentle: free tier is only 500 req/day total
     private const long MaxUploadBytes = 32L * 1024 * 1024;      // VT standard POST /files limit
+    private const long MaxLargeFileBytes = 650L * 1024 * 1024;  // VT /files/upload_url large-file ceiling
     private static readonly TimeSpan Refresh = TimeSpan.FromDays(7);   // re-pull "done" verdicts weekly
 
     public async Task RunAsync(CancellationToken ct)
@@ -48,11 +50,14 @@ public sealed class VirusTotalScanner(
         var existing = await db.ReleaseScans.ToDictionaryAsync(x => x.Sha256, ct);
         var now = DateTime.UtcNow;
 
-        // Work list: never scanned, still pending (analysis queued — re-check), or a stale "done" verdict.
+        // Work list: never scanned, still pending (analysis queued — re-check), or a stale "done"/"skipped"
+        // verdict. Re-checking stale "skipped" lets old too-big rows retry through the large-file flow; a file
+        // genuinely over the 650 MB ceiling just re-skips (the size check is free, no API call) and its bumped
+        // UpdatedAt drops it back out until the next Refresh window, so it never head-of-line-blocks.
         var todo = assets
             .Where(a => !existing.TryGetValue(a.Sha256!, out var e)
                         || e.Status == ScanStatus.Pending
-                        || (e.Status == ScanStatus.Done && now - e.UpdatedAt > Refresh))
+                        || ((e.Status == ScanStatus.Done || e.Status == ScanStatus.Skipped) && now - e.UpdatedAt > Refresh))
             .Take(BatchPerRun)
             .ToList();
         if (todo.Count == 0)
@@ -94,12 +99,12 @@ public sealed class VirusTotalScanner(
                 return true;
             }
 
-            // Unknown to VT → upload the bytes so it produces a real by-hash report. Files over VT's 32 MB
-            // standard-upload cap can't be uploaded, so record a terminal "skipped" and move on. Recording it
-            // (rather than a bare return) is load-bearing: the work list picks the first not-yet-terminal asset
+            // Unknown to VT → upload the bytes so it produces a real by-hash report. Files over VT's 650 MB
+            // large-file ceiling can't be uploaded at all, so record a terminal "skipped" and move on. Recording
+            // it (rather than a bare return) is load-bearing: the work list picks the first not-yet-terminal asset
             // each run, so an over-cap file with no row stays first forever and head-of-line-blocks every asset
             // behind it. The page falls back to the SHA-256 + hash-search link for "skipped", same as unscanned.
-            if (size > MaxUploadBytes)
+            if (size > MaxLargeFileBytes)
             {
                 await UpsertAsync(sha, ScanStatus.Skipped, 0, 0, ct);
                 return true;
@@ -109,9 +114,33 @@ public sealed class VirusTotalScanner(
             try { bytes = await gh.GetByteArrayAsync(url, ct); }
             catch (Exception ex) { logger.LogWarning(ex, "Fetch for VirusTotal upload failed for {Sha}", sha); return true; }
 
+            // Small files POST straight to /files; over 32 MB needs a one-time upload URL from /files/upload_url.
+            // That URL is absolute, so PostAsync uses it verbatim (BaseAddress is ignored); the x-apikey default
+            // header still rides along. ponytail: the vt client's 30s timeout comfortably covers our ~33 MB zips;
+            // if assets ever approach the 650 MB ceiling, raise it — 30s won't upload that.
+            var uploadTarget = "files";
+            if (size > MaxUploadBytes)
+            {
+                var urlRes = await vt.GetAsync("files/upload_url", ct);
+                if (urlRes.StatusCode == HttpStatusCode.TooManyRequests)
+                    return false;
+                if (!urlRes.IsSuccessStatusCode)
+                {
+                    logger.LogWarning("VirusTotal files/upload_url returned {Status}", urlRes.StatusCode);
+                    return true;
+                }
+                var parsedUrl = await urlRes.Content.ReadFromJsonAsync<VtUploadUrlResponse>(ct);
+                if (string.IsNullOrEmpty(parsedUrl?.data))
+                {
+                    logger.LogWarning("VirusTotal files/upload_url response had no data for {Sha}", sha);
+                    return true;
+                }
+                uploadTarget = parsedUrl.data;
+            }
+
             using var form = new MultipartFormDataContent();
             form.Add(new ByteArrayContent(bytes), "file", sha);
-            var post = await vt.PostAsync("files", form, ct);
+            var post = await vt.PostAsync(uploadTarget, form, ct);
             if (post.StatusCode == HttpStatusCode.TooManyRequests)
                 return false;
             if (!post.IsSuccessStatusCode)
@@ -144,4 +173,7 @@ public sealed class VirusTotalScanner(
     private sealed record VtFileResponse(VtData data);
     private sealed record VtData(VtAttributes attributes);
     private sealed record VtAttributes(Dictionary<string, int> last_analysis_stats);
+
+    // /files/upload_url returns { "data": "<one-time absolute upload URL>" } for the large-file flow.
+    private sealed record VtUploadUrlResponse(string data);
 }
