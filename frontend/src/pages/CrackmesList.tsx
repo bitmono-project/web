@@ -55,7 +55,10 @@ export default function CrackmesList() {
             BitMono-obfuscated .NET challenges. Reverse them, write it up. {total > 0 && <span className="text-faint">· {total} total</span>}
           </p>
         </div>
-        <Link to="/upload" className="btn-acid">submit a crackme →</Link>
+        <div className="flex items-center gap-3">
+          <a href="/crackmes/rss.xml" className="shrink-0 rounded-full border border-line px-3 py-1.5 font-mono text-[11px] text-muted transition-colors hover:border-acid hover:text-acid">rss</a>
+          <Link to="/upload" className="btn-acid">submit a crackme →</Link>
+        </div>
       </div>
 
       <div className="mt-8 flex flex-wrap gap-3">

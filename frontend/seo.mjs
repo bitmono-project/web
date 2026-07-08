@@ -527,9 +527,10 @@ function socialTags(h) {
 // JSON.stringify doesn't escape "<", so neutralize it to keep a "</script>" in any field from breaking out.
 const jsonLd = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`
 
-export function injectHead(template, head, { gscToken, rssUrl } = {}) {
+export function injectHead(template, head, { gscToken, rssUrl, crackmesRssUrl } = {}) {
   const tags = [`<link rel="canonical" href="${escAttr(head.canonical)}"/>`]
   if (rssUrl) tags.push(`<link rel="alternate" type="application/rss+xml" title="BitMono Blog" href="${escAttr(rssUrl)}"/>`)
+  if (crackmesRssUrl) tags.push(`<link rel="alternate" type="application/rss+xml" title="BitMono Crackmes" href="${escAttr(crackmesRssUrl)}"/>`)
   if (head.robots) tags.push(`<meta name="robots" content="${escAttr(head.robots)}"/>`)
   if (gscToken) tags.push(`<meta name="google-site-verification" content="${escAttr(gscToken)}"/>`)
   tags.push(...socialTags(head))
