@@ -18,6 +18,7 @@ permissions:
 #   TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY   (Cloudflare Turnstile captcha on upload)
 #   CRACKME_ZIP_PASSWORD                        (download zip password; defaults to bitmono.dev)
 #   DISCORD_WEBHOOK_URL                         (channel webhook — announces new challenges + solves)
+#   WECHALL_AUTH_KEY                            (WeChall site-connector shared secret — /api/wechall validate+score)
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -79,3 +80,5 @@ jobs:
           Parameters__GitHubApiToken: ${{ secrets.GH_API_TOKEN }}
           # Discord channel webhook — announces new challenges + solves (unset = disabled)
           Parameters__DiscordWebhookUrl: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # WeChall site-connector shared secret — gates account-existence probing (unset = validate always returns "0")
+          Parameters__WeChallAuthKey: ${{ secrets.WECHALL_AUTH_KEY }}

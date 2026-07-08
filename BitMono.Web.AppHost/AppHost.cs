@@ -152,6 +152,7 @@ else
     WireParam("VirusTotal__ApiKey", "VirusTotalApiKey", secret: true);   // optional — enables release VT scanning
     WireParam("GitHub__ApiToken", "GitHubApiToken", secret: true);   // raises GitHub API rate limit 60→5000/hr for the release feed
     WireParam("Discord__WebhookUrl", "DiscordWebhookUrl", secret: true);   // channel webhook — announces new challenges + solves
+    WireParam("WeChall__AuthKey", "WeChallAuthKey", secret: true);   // shared secret for the WeChall site-connector (validate/score)
 
     deployWeb = builder.AddDockerfile("web", "../frontend")
         .WithHttpEndpoint(port: WebDeployPort, targetPort: WebDeployPort, env: "PORT")
