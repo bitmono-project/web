@@ -26,6 +26,20 @@ function originOf(req) {
 
 const app = express();
 
+// api.bitmono.dev — a clean public host for the backend API (external tools, CLIs, the WeChall connector),
+// so they call api.bitmono.dev/<path> instead of bitmono.dev/api/<path>. The tunnel points this host at the
+// same web container; we detect it here and proxy every request to the API, prefixing /api so /wechall ->
+// /api/wechall (and an already-/api path is left alone). The browser app keeps calling same-origin /api, so
+// no CORS is involved. ponytail: host is hardcoded — it's the one public API alias; env-ify if a second appears.
+const API_ALIAS_HOST = 'api.bitmono.dev';
+const hostOf = (req) => String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].split(':')[0].trim();
+app.use(createProxyMiddleware({
+  target: apiUrl,
+  changeOrigin: false,
+  pathFilter: (_pathname, req) => hostOf(req) === API_ALIAS_HOST,
+  pathRewrite: (path) => (/^\/api(\/|\?|$)/.test(path) ? path : '/api' + path),
+}));
+
 // http-proxy-middleware v3 proxies at root with pathFilter so /api, /obfuscate, /version, /protections reach
 // the API with the full path. Host is preserved (changeOrigin:false) so the API builds correct OAuth redirects.
 // /download (no slash) is the React chooser page and falls through to the SEO handler; /download/<slug> is the
