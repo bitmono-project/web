@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { Tooltip } from '../components/Tooltip'
 import { useTitle } from '../lib/useTitle'
 import {
-  getReleases, detectOs, formatSize, shortSha, uniq,
+  getReleases, detectOs, formatSize, shortSha, uniq, unityLabel, cmpUnityLine,
   OS_LABEL, ARCH_LABEL, OS_ORDER, ARCH_ORDER, TFMS, RECOMMENDED_TFM, tfmLabel, tfmChip, isLibTfm,
   type Release, type ReleaseAsset, type Os, type Arch,
 } from '../lib/releases'
@@ -77,7 +77,7 @@ export default function Download() {
 
   const unityPkg = assets.filter((a) => a.kind === 'unityPackage')
   const unityUpm = assets.filter((a) => a.kind === 'unityUpm')
-  const unityMajors = uniq([...unityPkg, ...unityUpm].map((a) => a.unityMajor as string)).sort((a, b) => Number(a) - Number(b))
+  const unityMajors = uniq([...unityPkg, ...unityUpm].map((a) => a.unityMajor as string)).sort(cmpUnityLine)
   const curMajor = unityMajors.includes(unityMajor) ? unityMajor : (unityMajors[unityMajors.length - 1] ?? '')
   const unityAsset = (unityFormat === 'upm' ? unityUpm : unityPkg).find((a) => a.unityMajor === curMajor) ?? null
 
@@ -257,7 +257,7 @@ export default function Download() {
                   <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.2em] text-faint">Unity version</div>
                   <div className="flex flex-wrap items-center gap-2">
                     {unityMajors.map((m) => (
-                      <Chip key={m} on={m === curMajor} onClick={() => setUnityMajor(m)} trace={1}>{m === '6000' ? 'Unity 6' : m}</Chip>
+                      <Chip key={m} on={m === curMajor} onClick={() => setUnityMajor(m)} trace={1}>{unityLabel(m)}</Chip>
                     ))}
                   </div>
                 </div>

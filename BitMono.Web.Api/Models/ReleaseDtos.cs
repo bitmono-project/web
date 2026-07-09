@@ -19,7 +19,7 @@ public sealed record ReleaseAsset(
     string? Os = null,
     string? Arch = null,
     string? UnityVersion = null,   // full, e.g. 2022.3.29f1
-    string? UnityMajor = null,     // e.g. 2022 / 6000
+    string? UnityMajor = null,     // LTS-line key: 2022 (year), or 6000.0 / 6000.3 for Unity 6+
     string? Format = null,         // unitypackage | upm
     AssetScan? Vt = null);         // VirusTotal result, once the scan job has run (null = not scanned yet)
 

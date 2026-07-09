@@ -28,7 +28,9 @@ public class ReleaseAssetsTests
 
     [Theory]
     [InlineData("BitMono-Unity-v0.43.0+5778b175-Unity2022.3.29f1.unitypackage", "unity/2022/unitypackage", "2022.3.29f1", "2022")]
-    [InlineData("BitMono-Unity-v0.43.0+5778b175-Unity6000.0.2f1.unitypackage", "unity/6000/unitypackage", "6000.0.2f1", "6000")]
+    // Unity 6 lines must each get their own slug — 6.0 and 6.3 collapsing to "6000" would hide one (grouping key is major.minor for 6+).
+    [InlineData("BitMono-Unity-v0.43.0+5778b175-Unity6000.0.2f1.unitypackage", "unity/6000.0/unitypackage", "6000.0.2f1", "6000.0")]
+    [InlineData("BitMono-Unity-v0.43.0+5778b175-Unity6000.3.19f1.unitypackage", "unity/6000.3/unitypackage", "6000.3.19f1", "6000.3")]
     public void Parses_unity_packages(string name, string slug, string unityVersion, string major)
     {
         var a = ReleaseAssets.Parse(name, 1, null, "u");

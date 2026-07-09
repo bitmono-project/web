@@ -42,7 +42,7 @@ public static class ReleaseAssets
         if (pkg.Success)
         {
             var uver = pkg.Groups["uver"].Value;
-            var major = uver.Split('.')[0];
+            var major = UnityLine(uver);
             return new CatalogAsset(ReleaseAssetKind.UnityPackage, $"unity/{major}/unitypackage", name, size, sha, url,
                 null, null, null, uver, major, "unitypackage");
         }
@@ -51,11 +51,22 @@ public static class ReleaseAssets
         if (upm.Success)
         {
             var uver = upm.Groups["uver"].Value;
-            var major = uver.Split('.')[0];
+            var major = UnityLine(uver);
             return new CatalogAsset(ReleaseAssetKind.UnityUpm, $"unity/{major}/upm", name, size, sha, url,
                 null, null, null, uver, major, "upm");
         }
 
         return null;
+    }
+
+    // The download slug + version chip group by Unity's LTS line. Pre-6 the year is that line (2019, 2020…);
+    // Unity 6 dropped the year — the major is always "6000", so the line is major.minor (6000.0, 6000.3),
+    // else 6000.0 and 6000.3 would share a slug and one build would be unreachable. Same for any 7000+.
+    private static string UnityLine(string uver)
+    {
+        var parts = uver.Split('.');
+        return int.TryParse(parts[0], out var major) && major >= 6000 && parts.Length > 1
+            ? $"{parts[0]}.{parts[1]}"
+            : parts[0];
     }
 }

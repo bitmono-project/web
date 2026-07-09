@@ -94,3 +94,20 @@ export function formatSize(bytes: number): string {
 export const shortSha = (sha: string): string => `${sha.slice(0, 8)}…${sha.slice(-6)}`
 
 export const uniq = <T,>(xs: T[]): T[] => [...new Set(xs)]
+
+// Chip label for a Unity LTS-line key (the `unityMajor` field). Pre-6 the key is the year, shown as-is
+// ("2019"). Unity 6+ keys are major.minor ("6000.3"), shown "Unity 6.3" (major/1000). Mirrors the backend's
+// ReleaseAssets.UnityLine.
+export function unityLabel(key: string): string {
+  const [maj, min] = key.split('.')
+  const n = Number(maj)
+  if (n >= 6000) return `Unity ${n / 1000}${min !== undefined ? '.' + min : ''}`
+  return maj
+}
+
+// Order Unity lines by major then minor, so 6000.10 sorts after 6000.3 (a plain Number() compare wouldn't).
+export const cmpUnityLine = (a: string, b: string): number => {
+  const [am, an] = a.split('.').map(Number)
+  const [bm, bn] = b.split('.').map(Number)
+  return am - bm || (an ?? 0) - (bn ?? 0)
+}
