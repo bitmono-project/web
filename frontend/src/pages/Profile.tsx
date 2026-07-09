@@ -10,6 +10,7 @@ import { rankByName } from '../lib/ranks'
 import { isModerator, useAuth, type Me } from '../lib/auth'
 import { Tooltip } from '../components/Tooltip'
 import { MentionText } from '../components/MentionText'
+import { MentionTextarea } from '../components/MentionTextarea'
 import { PromptDialog } from '../components/PromptDialog'
 import { StaffTag } from '../components/StaffTag'
 import { useTitle } from '../lib/useTitle'
@@ -177,10 +178,10 @@ function BioSection({ profile, me, isOwn, onPatch }: {
 
       {editing ? (
         <div>
-          <textarea
+          <MentionTextarea
             autoFocus
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
             rows={3}
             maxLength={500}
             placeholder="a line about you — tools you like, what you reverse, @handle mentions work"

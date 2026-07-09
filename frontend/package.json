@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --experimental-strip-types src/lib/peRefs.selfcheck.ts && node blog.smoke.mjs",
+    "test": "node --experimental-strip-types src/lib/peRefs.selfcheck.ts && node blog.smoke.mjs && node mention.smoke.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

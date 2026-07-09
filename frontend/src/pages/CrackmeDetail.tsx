@@ -16,6 +16,7 @@ import { type Me, isAdmin, isModerator, useAuth } from '../lib/auth'
 import { PromptDialog, ConfirmDialog, TAKEDOWN_PRESETS, RESTORE_PRESETS, REJECT_PRESETS } from '../components/PromptDialog'
 import { ImageGallery } from '../components/ImageGallery'
 import { MentionText } from '../components/MentionText'
+import { MentionTextarea } from '../components/MentionTextarea'
 import { Turnstile } from '../components/Turnstile'
 import { Tooltip } from '../components/Tooltip'
 import { StaffTag } from '../components/StaffTag'
@@ -701,8 +702,8 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
                   {replies.map((r) => <div key={r.id}>{renderComment(r)}</div>)}
                   {replyTo === cm.id && (
                     <div>
-                      <textarea
-                        autoFocus value={replyBody} onChange={(e) => setReplyBody(e.target.value)} rows={2} maxLength={4000}
+                      <MentionTextarea
+                        autoFocus value={replyBody} onChange={setReplyBody} rows={2} maxLength={4000}
                         placeholder="Reply… @handle mentions someone."
                         className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
                       />
@@ -723,13 +724,13 @@ function CommentsPanel({ slug, crackmeId, me, commentReactionsEnabled, commentsL
         <p className="mt-4 font-mono text-[13px] text-faint">🔒 Comments are locked on this crackme.</p>
       ) : me ? (
         <div className="mt-4">
-          <textarea
+          <MentionTextarea
             className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-acid"
             rows={3}
             maxLength={4000}
             placeholder="Stay polite — don’t spoil the solution (or mark it as a spoiler). @handle mentions someone."
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={setBody}
             onFocus={() => setCommenting(true)}
           />
           {turnstileSiteKey && commenting && <Turnstile key={tsKey} siteKey={turnstileSiteKey} onToken={setCaptcha} />}
