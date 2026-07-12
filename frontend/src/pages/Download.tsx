@@ -180,9 +180,15 @@ export default function Download() {
         {path === 'cli' && (
           <div className="space-y-5">
             <div>
-              <div className="mb-1 flex items-center justify-between gap-3">
+              {/* stack on mobile — the label + "help me choose" don't both fit on one 320px-wide row.
+                  keep help self-end so HelpMeChoose's right-0 popover stays anchored at the viewport edge. */}
+              <div className="mb-1 flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-faint">Runtime you'll run it on</span>
-                {cliTfms.length > 0 && <HelpMeChoose switchTfm={switchTfm} libTfm={cliTfms.find(isLibTfm) ?? null} onPick={setTfm} />}
+                {cliTfms.length > 0 && (
+                  <div className="self-end sm:self-auto">
+                    <HelpMeChoose switchTfm={switchTfm} libTfm={cliTfms.find(isLibTfm) ?? null} onPick={setTfm} />
+                  </div>
+                )}
               </div>
               <p className="mb-2.5 font-mono text-[11px] leading-relaxed text-faint">
                 Match the .NET your app runs on. The <span className="text-muted">netstd</span> builds are libraries for
@@ -407,7 +413,7 @@ function DownloadCard({ asset, library }: { asset: ReleaseAsset; library?: { swi
           <span aria-hidden>⚙</span>
           <span>
             {LIB_NOTE}{' '}
-            <a href={asset.downloadUrl} download className="whitespace-nowrap text-faint transition-colors hover:text-amber-300">still want the library? download it anyway ↓</a>
+            <a href={asset.downloadUrl} download className="text-faint transition-colors hover:text-amber-300">still want the library? download it anyway&nbsp;↓</a>
           </span>
         </p>
       )}
@@ -497,22 +503,23 @@ function AllBuilds({ assets }: { assets: ReleaseAsset[] }) {
   )
   return (
     <div className="mt-3 max-h-80 overflow-y-auto rounded-xl border border-line">
-      <table className="w-full border-collapse font-mono text-[12px]">
+      {/* px-2/text-[11px] on mobile so all four columns fit the ~320px card without an internal x-scroll. */}
+      <table className="w-full border-collapse font-mono text-[11px] sm:text-[12px]">
         <thead className="sticky top-0 bg-void">
           <tr className="border-b border-line text-left text-faint">
-            <th className="px-3 py-2 font-normal">runtime</th>
-            <th className="px-3 py-2 font-normal">os · arch</th>
-            <th className="px-3 py-2 text-right font-normal">size</th>
-            <th className="px-3 py-2" />
+            <th className="px-2 py-2 font-normal sm:px-3">runtime</th>
+            <th className="px-2 py-2 font-normal sm:px-3">os · arch</th>
+            <th className="px-2 py-2 text-right font-normal sm:px-3">size</th>
+            <th className="px-2 py-2 sm:px-3" />
           </tr>
         </thead>
         <tbody>
           {rows.map((a) => (
             <tr key={a.downloadUrl} className="border-b border-line/50 last:border-0 hover:bg-surface/40">
-              <td className="whitespace-nowrap px-3 py-1.5 text-ink">{tfmChip(a.tfm ?? '')}</td>
-              <td className="whitespace-nowrap px-3 py-1.5 text-muted">{OS_LABEL[a.os as Os]} · {ARCH_LABEL[a.arch as Arch]}</td>
-              <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-faint">{formatSize(a.size)}</td>
-              <td className="px-3 py-1.5 text-right">
+              <td className="whitespace-nowrap px-2 py-1.5 text-ink sm:px-3">{tfmChip(a.tfm ?? '')}</td>
+              <td className="whitespace-nowrap px-2 py-1.5 text-muted sm:px-3">{OS_LABEL[a.os as Os]} · {ARCH_LABEL[a.arch as Arch]}</td>
+              <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-faint sm:px-3">{formatSize(a.size)}</td>
+              <td className="px-2 py-1.5 text-right sm:px-3">
                 <a href={a.downloadUrl} download className="text-acid transition-colors hover:underline">↓</a>
               </td>
             </tr>

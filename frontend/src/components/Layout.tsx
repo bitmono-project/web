@@ -9,8 +9,11 @@ import { SearchDialog } from './SearchDialog'
 import { Tooltip } from './Tooltip'
 
 export function Layout() {
+  // overflow-x-clip: hover-only Tooltips are position:absolute + -translate-x-1/2; near the right edge
+  // (share button, chip ⓘ) their invisible bubble spills past the viewport and adds ~40px of horizontal
+  // page scroll on mobile. clip (not hidden — keeps sticky/dropdowns working) contains it.
   return (
-    <div className="grain relative min-h-screen">
+    <div className="grain relative min-h-screen overflow-x-clip">
       <div className="bg-grid pointer-events-none absolute inset-x-0 top-0 -z-10 h-[720px]" />
       <HashTarget />
       <Header />
