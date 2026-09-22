@@ -1,5 +1,6 @@
 #pragma warning disable ASPIREPIPELINES003
 
+using Aspire.Hosting.Docker.Resources.ComposeNodes;
 using Aspire.Hosting.Docker.Resources.ServiceNodes.Swarm;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -10,13 +11,19 @@ const int ObfuscationPort = 8743;
 // Single source of truth for obfuscation parallelism: this many engine replicas (below) AND this many api
 // Hangfire workers (injected into the api as Obfuscation__WorkerCount). BitMono is ~1 CPU core/job — tune to host.
 const int ObfuscationConcurrency = 3;
+const string GlobalNetwork = "global_network";
 
 var config = builder.Configuration;
 var runMode = builder.ExecutionContext.IsRunMode;
 var imageTag = config["IMAGE_TAG_SUFFIX"] ?? "dev";
 
 builder.AddDockerComposeEnvironment("bitmono")
-    .WithSshDeploySupport();
+    .WithSshDeploySupport()
+    .ConfigureComposeFile(compose =>
+    {
+        // cloudflared already lives on this network. Do not create it.
+        compose.Networks[GlobalNetwork] = new Network { Name = GlobalNetwork, External = true };
+    });
 
 var postgres = builder.AddPostgres("postgres")
     .WithDataVolume()
@@ -124,6 +131,7 @@ else
         {
             service.Restart = "always";
             // Persist crackme files across redeploys — bind a host dir on the single server.
+            service.Networks.Add(GlobalNetwork);
             service.Volumes.Add(new Aspire.Hosting.Docker.Resources.ServiceNodes.Volume
             {
                 Name = "bitmono-blobs",
@@ -160,7 +168,11 @@ else
         .WithEnvironment("API_URL", api.GetEndpoint("http"))
         .WithReference(api)
         .WaitFor(api)
-        .PublishAsDockerComposeService((_, service) => service.Restart = "always")
+        .PublishAsDockerComposeService((_, service) =>
+        {
+            service.Restart = "always";
+            service.Networks.Add(GlobalNetwork);
+        })
         .WithExternalHttpEndpoints();
 
     web = deployWeb;
